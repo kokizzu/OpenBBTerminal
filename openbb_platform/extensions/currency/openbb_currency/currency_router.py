@@ -1,6 +1,7 @@
 """The Currency router."""
 
 from openbb_core.app.model.command_context import CommandContext
+from openbb_core.app.model.example import APIEx
 from openbb_core.app.model.obbject import OBBject
 from openbb_core.app.provider_interface import (
     ExtraParams,
@@ -12,7 +13,7 @@ from openbb_core.app.router import Router
 
 from openbb_currency.price.price_router import router as price_router
 
-router = Router(prefix="")
+router = Router(prefix="", description="Foreign exchange (FX) market data.")
 router.include_router(price_router)
 
 
@@ -20,12 +21,15 @@ router.include_router(price_router)
 @router.command(
     model="CurrencyPairs",
     examples=[
-        "# Search for 'EURUSD' currency pair using 'polygon' as provider.",
-        "obb.currency.search(provider='polygon', symbol='EURUSD')",
-        "# Search for terms  using 'polygon' as provider.",
-        "obb.currency.search(provider='polygon', search='Euro zone')",
-        "# Search for actively traded currency pairs on the queried date using 'polygon' as provider.",
-        "obb.currency.search(provider='polygon', date='2024-01-02', active=True)",
+        APIEx(parameters={"provider": "fmp"}),
+        APIEx(
+            description="Search for 'EUR' currency pair using 'intrinio' as provider.",
+            parameters={"provider": "intrinio", "query": "EUR"},
+        ),
+        APIEx(
+            description="Search for terms  using 'polygon' as provider.",
+            parameters={"provider": "polygon", "query": "EUR"},
+        ),
     ],
 )
 async def search(
@@ -34,8 +38,7 @@ async def search(
     standard_params: StandardParams,
     extra_params: ExtraParams,
 ) -> OBBject:
-    """
-    Currency Search.
+    """Currency Search.
 
     Search available currency pairs.
     Currency pairs are the national currencies from two countries coupled for trading on
@@ -48,14 +51,17 @@ async def search(
     return await OBBject.from_query(Query(**locals()))
 
 
-@router.command(model="CurrencyReferenceRates")
+@router.command(
+    model="CurrencyReferenceRates",
+    examples=[APIEx(parameters={"provider": "ecb"})],
+)
 async def reference_rates(
     cc: CommandContext,
     provider_choices: ProviderChoices,
     standard_params: StandardParams,
     extra_params: ExtraParams,
 ) -> OBBject:
-    """Current, official, currency reference rates.
+    """Get current, official, currency reference rates.
 
     Foreign exchange reference rates are the exchange rates set by a major financial institution or regulatory body,
     serving as a benchmark for the value of currencies around the world.
@@ -65,4 +71,29 @@ async def reference_rates(
     Central banks and financial institutions often use these rates to guide their own exchange rates,
     impacting global trade, loans, and investments.
     """
+    return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(
+    model="CurrencySnapshots",
+    examples=[
+        APIEx(parameters={"provider": "fmp"}),
+        APIEx(
+            description="Get exchange rates from USD and XAU to EUR, JPY, and GBP using 'fmp' as provider.",
+            parameters={
+                "provider": "fmp",
+                "base": "USD,XAU",
+                "counter_currencies": "EUR,JPY,GBP",
+                "quote_type": "indirect",
+            },
+        ),
+    ],
+)
+async def snapshots(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject:
+    """Snapshots of currency exchange rates from an indirect or direct perspective of a base currency."""
     return await OBBject.from_query(Query(**locals()))

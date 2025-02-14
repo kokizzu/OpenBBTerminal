@@ -13,6 +13,7 @@ from openbb_core.provider.utils.helpers import get_querystring
 
 @pytest.fixture(scope="session")
 def headers():
+    """Get the headers for the API request."""
     userpass = f"{Env().API_USERNAME}:{Env().API_PASSWORD}"
     userpass_bytes = userpass.encode("ascii")
     base64_bytes = base64.b64encode(userpass_bytes)
@@ -29,6 +30,7 @@ def headers():
 )
 @pytest.mark.integration
 def test_crypto_search(params, headers):
+    """Test the crypto search endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -43,30 +45,20 @@ def test_crypto_search(params, headers):
     [
         (
             {
-                "symbol": "BTC-USD",
-                "start_date": "2023-01-01",
-                "end_date": "2023-01-06",
-                "provider": "polygon",
-            }
-        ),
-        (
-            {
-                "interval": "1min",
+                "interval": "1d",
                 "provider": "fmp",
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
                 "end_date": "2023-01-02",
-                "timeseries": 1,
             }
         ),
         (
             {
-                "interval": "15min",
+                "interval": "1h",
                 "provider": "fmp",
-                "symbol": "BTCUSD",
-                "start_date": "2023-01-01",
-                "end_date": "2023-01-03",
-                "timeseries": 1,
+                "symbol": "BTCUSD,ETHUSD",
+                "start_date": None,
+                "end_date": None,
             }
         ),
         (
@@ -94,18 +86,17 @@ def test_crypto_search(params, headers):
         (
             {
                 "interval": "1d",
-                "period": "max",
                 "provider": "yfinance",
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
-                "end_date": "2023-01-03",
+                "end_date": "2023-01-04",
             }
         ),
         (
             {
                 "provider": "tiingo",
-                "interval": "1day",
-                "exchanges": ["POLONIEX", "GDAX"],
+                "interval": "1d",
+                "exchanges": None,
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
@@ -114,7 +105,7 @@ def test_crypto_search(params, headers):
         (
             {
                 "provider": "tiingo",
-                "interval": "1hour",
+                "interval": "1h",
                 "exchanges": ["POLONIEX", "GDAX"],
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
@@ -125,6 +116,7 @@ def test_crypto_search(params, headers):
 )
 @pytest.mark.integration
 def test_crypto_price_historical(params, headers):
+    """Test the crypto historical price endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])

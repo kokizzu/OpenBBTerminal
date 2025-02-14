@@ -1,6 +1,7 @@
 """Fixed Income Rate Router."""
 
 from openbb_core.app.model.command_context import CommandContext
+from openbb_core.app.model.example import APIEx
 from openbb_core.app.model.obbject import OBBject
 from openbb_core.app.provider_interface import (
     ExtraParams,
@@ -16,10 +17,13 @@ router = Router(prefix="/rate")
 
 
 @router.command(
-    model="AMERIBOR",
-    exclude_auto_examples=True,
+    model="Ameribor",
     examples=[
-        'obb.fixedincome.rate.ameribor(parameter="30_day_ma").to_df()',
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(
+            description="The change from one year ago is applied with the transform parameter.",
+            parameters={"maturity": "all", "transform": "pc1", "provider": "fred"},
+        ),
     ],
 )
 async def ameribor(
@@ -28,9 +32,9 @@ async def ameribor(
     standard_params: StandardParams,
     extra_params: ExtraParams,
 ) -> OBBject:  # type: ignore
-    """Ameribor.
+    """AMERIBOR.
 
-    Ameribor (short for the American interbank offered rate) is a benchmark interest rate that reflects the true cost of
+    AMERIBOR (short for the American interbank offered rate) is a benchmark interest rate that reflects the true cost of
     short-term interbank borrowing. This rate is based on transactions in overnight unsecured loans conducted on the
     American Financial Exchange (AFX).
     """
@@ -39,9 +43,9 @@ async def ameribor(
 
 @router.command(
     model="SONIA",
-    exclude_auto_examples=True,
     examples=[
-        'obb.fixedincome.rate.sonia(parameter="total_nominal_value")',
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(parameters={"parameter": "total_nominal_value", "provider": "fred"}),
     ],
 )
 async def sonia(
@@ -60,11 +64,28 @@ async def sonia(
 
 
 @router.command(
-    model="IORB",
-    exclude_auto_examples=True,
+    model="SOFR",
     examples=[
-        "obb.fixedincome.rate.iorb()",
+        APIEx(parameters={"provider": "fred"}),
     ],
+)
+async def sofr(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject:  # type: ignore
+    """Secured Overnight Financing Rate.
+
+    The Secured Overnight Financing Rate (SOFR) is a broad measure of the cost of
+    borrowing cash overnight collateralizing by Treasury securities.
+    """
+    return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(
+    model="IORB",
+    examples=[APIEx(parameters={"provider": "fred"})],
 )
 async def iorb(
     cc: CommandContext,
@@ -82,10 +103,10 @@ async def iorb(
 
 
 @router.command(
-    model="FEDFUNDS",
-    exclude_auto_examples=True,
+    model="FederalFundsRate",
     examples=[
-        'obb.fixedincome.rate.effr(parameter="daily", provider="fred").to_df()',
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(parameters={"effr_only": True, "provider": "fred"}),
     ],
 )
 async def effr(
@@ -97,17 +118,16 @@ async def effr(
     """Fed Funds Rate.
 
     Get Effective Federal Funds Rate data. A bank rate is the interest rate a nation's central bank charges to its
-    domestic banks to borrow money. The rates central banks charge are set to stabilize the economy. In the
-    United States, the Federal Reserve System's Board of Governors set the bank rate, also known as the discount rate.
+    domestic banks to borrow money. The rates central banks charge are set to stabilize the economy.
     """
     return await OBBject.from_query(Query(**locals()))
 
 
 @router.command(
     model="PROJECTIONS",
-    exclude_auto_examples=True,
     examples=[
-        "obb.fixedincome.rate.effr_forecast(long_run=True)",
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(parameters={"long_run": True, "provider": "fred"}),
     ],
 )
 async def effr_forecast(
@@ -127,10 +147,10 @@ async def effr_forecast(
 
 
 @router.command(
-    model="ESTR",
-    exclude_auto_examples=True,
+    model="EuroShortTermRate",
     examples=[
-        'obb.fixedincome.rate.estr(parameter="number_of_active_banks")',
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(parameters={"transform": "ch1", "provider": "fred"}),
     ],
 )
 async def estr(
@@ -144,16 +164,16 @@ async def estr(
     The euro short-term rate (€STR) reflects the wholesale euro unsecured overnight borrowing costs of banks located in
     the euro area. The €STR is published on each TARGET2 business day based on transactions conducted and settled on
     the previous TARGET2 business day (the reporting date “T”) with a maturity date of T+1 which are deemed to have been
-    executed at arm’s length and thus reflect market rates in an unbiased way.
+    executed at arm's length and thus reflect market rates in an unbiased way.
     """
     return await OBBject.from_query(Query(**locals()))
 
 
 @router.command(
     model="EuropeanCentralBankInterestRates",
-    exclude_auto_examples=True,
     examples=[
-        'obb.fixedincome.rate.ecb(interest_rate_type="refinancing")',
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(parameters={"interest_rate_type": "refinancing", "provider": "fred"}),
     ],
 )
 async def ecb(
@@ -176,9 +196,15 @@ async def ecb(
 
 @router.command(
     model="DiscountWindowPrimaryCreditRate",
-    exclude_auto_examples=True,
     examples=[
-        'obb.fixedincome.rate.dpcredit(start_date="2023-02-01", end_date="2023-05-01").to_df()',
+        APIEx(parameters={"provider": "fred"}),
+        APIEx(
+            parameters={
+                "start_date": "2023-02-01",
+                "end_date": "2023-05-01",
+                "provider": "fred",
+            }
+        ),
     ],
 )
 async def dpcredit(
@@ -193,5 +219,24 @@ async def dpcredit(
     The rates central banks charge are set to stabilize the economy.
     In the United States, the Federal Reserve System's Board of Governors set the bank rate,
     also known as the discount rate.
+    """
+    return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(
+    model="OvernightBankFundingRate",
+    examples=[APIEx(parameters={"provider": "fred"})],
+)
+async def overnight_bank_funding(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject:  # type: ignore
+    """Overnight Bank Funding.
+
+    For the United States, the overnight bank funding rate (OBFR) is calculated as a volume-weighted median of
+    overnight federal funds transactions and Eurodollar transactions reported in the
+    FR 2420 Report of Selected Money Market Rates.
     """
     return await OBBject.from_query(Query(**locals()))

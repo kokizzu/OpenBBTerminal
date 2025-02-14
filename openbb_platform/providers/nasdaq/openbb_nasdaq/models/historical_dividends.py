@@ -1,13 +1,13 @@
 """Nasdaq Historical Dividends Model."""
 
 # pylint: disable=unused-argument
-import asyncio
-import warnings
+
 from datetime import (
     date as dateType,
     datetime,
 )
 from typing import Any, Dict, List, Optional
+from warnings import warn
 
 from dateutil import parser
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -16,17 +16,13 @@ from openbb_core.provider.standard_models.historical_dividends import (
     HistoricalDividendsQueryParams,
 )
 from openbb_core.provider.utils.errors import EmptyDataError
-from openbb_core.provider.utils.helpers import amake_request
-from openbb_nasdaq.utils.helpers import IPO_HEADERS
 from pydantic import Field, field_validator
-
-_warn = warnings.warn
 
 
 class NasdaqHistoricalDividendsQueryParams(HistoricalDividendsQueryParams):
     """Nasdaq Historical Dividends Query Params."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class NasdaqHistoricalDividendsData(HistoricalDividendsData):
@@ -92,6 +88,8 @@ class NasdaqHistoricalDividendsFetcher(
 ):
     """Nasdaq Historical Dividends Fetcher."""
 
+    require_credentials = False
+
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> NasdaqHistoricalDividendsQueryParams:
         """Transform the params to the provider-specific query."""
@@ -104,8 +102,14 @@ class NasdaqHistoricalDividendsFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Extract the raw data."""
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        from openbb_core.provider.utils.helpers import amake_request  # noqa
+        from openbb_nasdaq.utils.helpers import get_headers  # noqa
+
         results = []
         symbols = query.symbol.split(",")
+        IPO_HEADERS = get_headers("json")
 
         async def get_one(symbol):
             """Response Callback."""
@@ -117,13 +121,13 @@ class NasdaqHistoricalDividendsFetcher(
                 url,
                 headers=IPO_HEADERS,
             )
-            if response.get("status").get("rCode") == 400:
+            if response.get("status").get("rCode") == 400:  # type: ignore
                 response = await amake_request(
                     url.replace("stocks", "etf"),
                     headers=IPO_HEADERS,
                 )
-            if response.get("status").get("rCode") == 200:
-                data = response.get("data").get("dividends").get("rows")
+            if response.get("status").get("rCode") == 200:  # type: ignore
+                data = response.get("data").get("dividends").get("rows")  # type: ignore
 
             if data:
                 if len(symbols) > 1:
@@ -131,7 +135,7 @@ class NasdaqHistoricalDividendsFetcher(
                         d["symbol"] = symbol
                 results.extend(data)
             if not data:
-                _warn(f"No data found for {symbol}")
+                warn(f"No data found for {symbol}")
 
         tasks = [get_one(symbol) for symbol in symbols]
 

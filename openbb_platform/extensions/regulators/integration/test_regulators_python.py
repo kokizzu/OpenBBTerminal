@@ -22,12 +22,13 @@ def obb(pytestconfig):
 @parametrize(
     "params",
     [
-        ({"symbol": "TSLA", "provider": "sec"}),
-        ({"symbol": "SQQQ", "provider": "sec"}),
+        ({"symbol": "TSLA", "provider": "sec", "use_cache": None}),
+        ({"symbol": "SQQQ", "provider": "sec", "use_cache": None}),
     ],
 )
 @pytest.mark.integration
 def test_regulators_sec_cik_map(params, obb):
+    """Test the SEC CIK map endpoint."""
     result = obb.regulators.sec.cik_map(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -43,6 +44,7 @@ def test_regulators_sec_cik_map(params, obb):
 )
 @pytest.mark.integration
 def test_regulators_sec_institutions_search(params, obb):
+    """Test the SEC institutions search endpoint."""
     result = obb.regulators.sec.institutions_search(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -72,6 +74,7 @@ def test_regulators_sec_institutions_search(params, obb):
 )
 @pytest.mark.integration
 def test_regulators_sec_schema_files(params, obb):
+    """Test the SEC schema files endpoint."""
     result = obb.regulators.sec.schema_files(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -87,6 +90,7 @@ def test_regulators_sec_schema_files(params, obb):
 )
 @pytest.mark.integration
 def test_regulators_sec_symbol_map(params, obb):
+    """Test the SEC symbol map endpoint."""
     result = obb.regulators.sec.symbol_map(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -100,6 +104,7 @@ def test_regulators_sec_symbol_map(params, obb):
 )
 @pytest.mark.integration
 def test_regulators_sec_rss_litigation(params, obb):
+    """Test the SEC RSS litigation endpoint."""
     result = obb.regulators.sec.rss_litigation(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -112,6 +117,7 @@ def test_regulators_sec_rss_litigation(params, obb):
 )
 @pytest.mark.integration
 def test_regulators_sec_sic_search(params, obb):
+    """Test the SEC SIC search endpoint."""
     result = obb.regulators.sec.sic_search(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -121,11 +127,12 @@ def test_regulators_sec_sic_search(params, obb):
 @parametrize(
     "params",
     [
-        ({"query": "grain", "provider": "nasdaq", "use_cache": None}),
+        ({"query": "grain", "provider": "cftc"}),
     ],
 )
 @pytest.mark.integration
 def test_regulators_cftc_cot_search(params, obb):
+    """Test the CFTC COT search endpoint."""
     result = obb.regulators.cftc.cot_search(**params)
     assert result
     assert isinstance(result, OBBject)
@@ -137,22 +144,19 @@ def test_regulators_cftc_cot_search(params, obb):
     [
         (
             {
-                "id": "13874P",
-                "data_type": "FO",
-                "legacy_format": True,
-                "report_type": "ALL",
-                "measure": "CR",
+                "id": "045601",
+                "report_type": "legacy",
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
-                "transform": "diff",
-                "collapse": "weekly",
-                "provider": "nasdaq",
+                "futures_only": False,
+                "provider": "cftc",
             }
         ),
     ],
 )
 @pytest.mark.integration
 def test_regulators_cftc_cot(params, obb):
+    """Test the CFTC COT endpoint."""
     result = obb.regulators.cftc.cot(**params)
     assert result
     assert isinstance(result, OBBject)

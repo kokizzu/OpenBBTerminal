@@ -1,7 +1,6 @@
 """API integration tests for equity extension."""
 
 import base64
-from datetime import time
 
 import pytest
 import requests
@@ -14,6 +13,7 @@ from openbb_core.provider.utils.helpers import get_querystring
 
 @pytest.fixture(scope="session")
 def headers():
+    """Get the headers for the API request."""
     userpass = f"{Env().API_USERNAME}:{Env().API_PASSWORD}"
     userpass_bytes = userpass.encode("ascii")
     base64_bytes = base64.b64encode(userpass_bytes)
@@ -67,7 +67,7 @@ def headers():
             {
                 "symbol": "AAPL",
                 "period": "annual",
-                "limit": 12,
+                "limit": 5,
                 "provider": "yfinance",
             }
         ),
@@ -75,6 +75,7 @@ def headers():
 )
 @pytest.mark.integration
 def test_equity_fundamental_balance(params, headers):
+    """Test the equity fundamental balance endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -86,10 +87,11 @@ def test_equity_fundamental_balance(params, headers):
 
 @parametrize(
     "params",
-    [({"symbol": "AAPL", "limit": 10, "provider": "fmp"})],
+    [({"symbol": "AAPL", "limit": 10, "provider": "fmp", "period": "annual"})],
 )
 @pytest.mark.integration
 def test_equity_fundamental_balance_growth(params, headers):
+    """Test the equity fundamental balance growth endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -108,6 +110,7 @@ def test_equity_fundamental_balance_growth(params, headers):
 )
 @pytest.mark.integration
 def test_equity_calendar_dividend(params, headers):
+    """Test the equity calendar dividend endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -125,6 +128,7 @@ def test_equity_calendar_dividend(params, headers):
 )
 @pytest.mark.integration
 def test_equity_calendar_splits(params, headers):
+    """Test the equity calendar splits endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -140,10 +144,19 @@ def test_equity_calendar_splits(params, headers):
         ({"start_date": "2023-11-09", "end_date": "2023-11-10", "provider": "fmp"}),
         ({"start_date": "2023-11-09", "end_date": "2023-11-10", "provider": "nasdaq"}),
         ({"start_date": "2023-11-09", "end_date": "2023-11-10", "provider": "tmx"}),
+        (
+            {
+                "start_date": None,
+                "end_date": None,
+                "provider": "seeking_alpha",
+                "country": "us",
+            }
+        ),
     ],
 )
 @pytest.mark.integration
 def test_equity_calendar_earnings(params, headers):
+    """Test the equity calendar earnings endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -198,7 +211,7 @@ def test_equity_calendar_earnings(params, headers):
             {
                 "symbol": "AAPL",
                 "period": "annual",
-                "limit": 12,
+                "limit": 5,
                 "provider": "yfinance",
             }
         ),
@@ -206,6 +219,7 @@ def test_equity_calendar_earnings(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_cash(params, headers):
+    """Test the equity fundamental cash endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -217,10 +231,11 @@ def test_equity_fundamental_cash(params, headers):
 
 @parametrize(
     "params",
-    [({"symbol": "AAPL", "limit": 10, "provider": "fmp"})],
+    [({"symbol": "AAPL", "limit": 10, "provider": "fmp", "period": "annual"})],
 )
 @pytest.mark.integration
 def test_equity_fundamental_cash_growth(params, headers):
+    """Test the equity fundamental cash growth endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -236,8 +251,7 @@ def test_equity_fundamental_cash_growth(params, headers):
         (
             {
                 "symbol": "AAPL",
-                "start_date": "2020-01-01",
-                "end_date": "2021-01-01",
+                "year": 2022,
                 "provider": "fmp",
             }
         ),
@@ -245,18 +259,21 @@ def test_equity_fundamental_cash_growth(params, headers):
             {
                 "symbol": "AAPL",
                 "provider": "fmp",
+                "year": None,
             }
         ),
         (
             {
                 "symbol": "AAPL,MSFT",
                 "provider": "fmp",
+                "year": None,
             }
         ),
     ],
 )
 @pytest.mark.integration
 def test_equity_fundamental_management_compensation(params, headers):
+    """Test the equity fundamental management compensation endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -272,6 +289,7 @@ def test_equity_fundamental_management_compensation(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_historical_splits(params, headers):
+    """Test the equity fundamental historical splits endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -333,6 +351,7 @@ def test_equity_fundamental_historical_splits(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_dividends(params, headers):
+    """Test the equity fundamental dividends endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -348,6 +367,7 @@ def test_equity_fundamental_dividends(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_employee_count(params, headers):
+    """Test the equity fundamental employee count endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -359,14 +379,92 @@ def test_equity_fundamental_employee_count(params, headers):
 
 @parametrize(
     "params",
-    [({"symbol": "AAPL", "period": "annual", "limit": 30})],
+    [({"symbol": "AAPL,MSFT", "period": "annual", "limit": 30})],
 )
 @pytest.mark.integration
 def test_equity_estimates_historical(params, headers):
+    """Test the equity estimates historical endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
     url = f"http://0.0.0.0:8000/api/v1/equity/estimates/historical?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "fiscal_period": "fy",
+                "fiscal_year": None,
+                "calendar_year": None,
+                "calendar_period": None,
+                "provider": "intrinio",
+            }
+        ),
+        (
+            {
+                "symbol": "AAPL,BAM:CA",
+                "period": "annual",
+                "provider": "seeking_alpha",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_estimates_forward_sales(params, headers):
+    """Test the equity estimates forward sales endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/estimates/forward_sales?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "fiscal_period": "fy",
+                "fiscal_year": None,
+                "calendar_year": None,
+                "calendar_period": None,
+                "provider": "intrinio",
+            }
+        ),
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "fiscal_period": "annual",
+                "limit": None,
+                "include_historical": False,
+                "provider": "fmp",
+            }
+        ),
+        (
+            {
+                "symbol": "AAPL,BAM:CA",
+                "period": "annual",
+                "provider": "seeking_alpha",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_estimates_forward_eps(params, headers):
+    """Test the equity estimates forward EPS endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/estimates/forward_eps?{query_str}"
     result = requests.get(url, headers=headers, timeout=10)
     assert isinstance(result, requests.Response)
     assert result.status_code == 200
@@ -418,7 +516,7 @@ def test_equity_estimates_historical(params, headers):
             {
                 "symbol": "AAPL",
                 "period": "annual",
-                "limit": 12,
+                "limit": 5,
                 "provider": "yfinance",
             }
         ),
@@ -426,6 +524,7 @@ def test_equity_estimates_historical(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_income(params, headers):
+    """Test the equity fundamental income endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -441,6 +540,7 @@ def test_equity_fundamental_income(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_income_growth(params, headers):
+    """Test the equity fundamental income growth endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -457,7 +557,7 @@ def test_equity_fundamental_income_growth(params, headers):
             {
                 "symbol": "RY",
                 "provider": "tmx",
-                "limit": None,
+                "limit": 0,
             }
         ),
         (
@@ -479,10 +579,21 @@ def test_equity_fundamental_income_growth(params, headers):
                 "sort_by": "updated_on",
             }
         ),
+        (
+            {
+                "provider": "sec",
+                "symbol": "AAPL",
+                "limit": 10,
+                "start_date": "2024-06-30",
+                "end_date": "2024-09-30",
+                "use_cache": True,
+            }
+        ),
     ],
 )
 @pytest.mark.integration
 def test_equity_ownership_insider_trading(params, headers):
+    """Test the equity ownership insider trading endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -503,17 +614,19 @@ def test_equity_ownership_insider_trading(params, headers):
                 "provider": "fmp",
             }
         ),
-        (
-            {
-                "provider": "intrinio",
-                "symbol": "AAPL",
-                "limit": 100,
-            }
-        ),
+        # Disabled due to unreliable Intrinio endpoint
+        # (
+        #     {
+        #         "provider": "intrinio",
+        #         "symbol": "AAPL",
+        #         "limit": 100,
+        #     }
+        # ),
     ],
 )
 @pytest.mark.integration
 def test_equity_ownership_institutional(params, headers):
+    """Test the equity ownership institutional endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -528,7 +641,7 @@ def test_equity_ownership_institutional(params, headers):
     [
         (
             {
-                "symbol": "",
+                "symbol": None,
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
                 "limit": 100,
@@ -548,6 +661,7 @@ def test_equity_ownership_institutional(params, headers):
 )
 @pytest.mark.integration
 def test_equity_calendar_ipo(params, headers):
+    """Test the equity calendar IPO endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -569,13 +683,14 @@ def test_equity_calendar_ipo(params, headers):
                 "with_ttm": False,
             }
         ),
-        ({"provider": "intrinio", "symbol": "AAPL", "period": "annual", "limit": 100}),
+        ({"provider": "intrinio", "symbol": "AAPL", "limit": 100}),
         ({"provider": "yfinance", "symbol": "AAPL"}),
         ({"provider": "finviz", "symbol": "AAPL,GOOG"}),
     ],
 )
 @pytest.mark.integration
 def test_equity_fundamental_metrics(params, headers):
+    """Test the equity fundamental metrics endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -594,6 +709,7 @@ def test_equity_fundamental_metrics(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_management(params, headers):
+    """Test the equity fundamental management endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -605,25 +721,11 @@ def test_equity_fundamental_management(params, headers):
 
 @parametrize(
     "params",
-    [({"symbol": "AAPL"})],
-)
-@pytest.mark.integration
-def test_equity_fundamental_overview(params, headers):
-    params = {p: v for p, v in params.items() if v}
-
-    query_str = get_querystring(params, [])
-    url = f"http://0.0.0.0:8000/api/v1/equity/fundamental/overview?{query_str}"
-    result = requests.get(url, headers=headers, timeout=10)
-    assert isinstance(result, requests.Response)
-    assert result.status_code == 200
-
-
-@parametrize(
-    "params",
     [({"symbol": "AAPL", "date": "2023-01-01", "page": 1, "provider": "fmp"})],
 )
 @pytest.mark.integration
 def test_equity_ownership_major_holders(params, headers):
+    """Test the equity ownership major holders endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -660,6 +762,7 @@ def test_equity_ownership_major_holders(params, headers):
 )
 @pytest.mark.integration
 def test_equity_estimates_price_target(params, headers):
+    """Test the equity estimates price target endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -682,12 +785,27 @@ def test_equity_estimates_price_target(params, headers):
                 "firm_ids": None,
                 "firm_name": "Barclays",
                 "analyst_name": None,
+                "page": 0,
+            }
+        ),
+        (
+            {
+                "limit": 3,
+                "provider": "benzinga",
+                # optional provider params
+                "fields": None,
+                "analyst_ids": None,
+                "firm_ids": None,
+                "firm_name": "Barclays,Credit Suisse",
+                "analyst_name": None,
+                "page": 1,
             }
         ),
     ],
 )
 @pytest.mark.integration
 def test_equity_estimates_analyst_search(params, headers):
+    """Test the equity estimates analyst search endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -703,10 +821,18 @@ def test_equity_estimates_analyst_search(params, headers):
         ({"symbol": "AAPL", "provider": "fmp"}),
         ({"symbol": "AAPL,AMZN,RELIANCE.NS", "provider": "yfinance"}),
         ({"symbol": "TD:US", "provider": "tmx"}),
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "industry_group_number": None,
+                "provider": "intrinio",
+            }
+        ),
     ],
 )
 @pytest.mark.integration
 def test_equity_estimates_consensus(params, headers):
+    """Test the equity estimates consensus endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -733,6 +859,7 @@ def test_equity_estimates_consensus(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_ratios(params, headers):
+    """Test the equity fundamental ratios endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -744,10 +871,11 @@ def test_equity_fundamental_ratios(params, headers):
 
 @parametrize(
     "params",
-    [({"symbol": "AAPL", "period": "annual", "structure": "flat", "provider": "fmp"})],
+    [({"symbol": "AAPL", "period": "annual", "provider": "fmp"})],
 )
 @pytest.mark.integration
 def test_equity_fundamental_revenue_per_geography(params, headers):
+    """Test the equity fundamental revenue per geography endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -759,10 +887,11 @@ def test_equity_fundamental_revenue_per_geography(params, headers):
 
 @parametrize(
     "params",
-    [({"symbol": "AAPL", "period": "annual", "structure": "flat", "provider": "fmp"})],
+    [({"symbol": "AAPL", "period": "annual", "provider": "fmp"})],
 )
 @pytest.mark.integration
 def test_equity_fundamental_revenue_per_segment(params, headers):
+    """Test the equity fundamental revenue per segment endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -793,7 +922,9 @@ def test_equity_fundamental_revenue_per_segment(params, headers):
             {
                 "symbol": "AAPL",
                 "limit": 3,
-                "type": "8-K",
+                "form_type": "8-K",
+                "start_date": None,
+                "end_date": None,
                 "cik": None,
                 "provider": "sec",
                 "use_cache": False,
@@ -803,8 +934,10 @@ def test_equity_fundamental_revenue_per_segment(params, headers):
             {
                 "cik": "0001067983",
                 "limit": 3,
-                "type": "10-Q",
+                "form_type": "10-Q",
                 "symbol": None,
+                "start_date": None,
+                "end_date": None,
                 "provider": "sec",
                 "use_cache": False,
             }
@@ -823,6 +956,7 @@ def test_equity_fundamental_revenue_per_segment(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_filings(params, headers):
+    """Test the equity fundamental filings endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -842,6 +976,7 @@ def test_equity_fundamental_filings(params, headers):
 )
 @pytest.mark.integration
 def test_equity_ownership_share_statistics(params, headers):
+    """Test the equity ownership share statistics endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -857,6 +992,7 @@ def test_equity_ownership_share_statistics(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_transcript(params, headers):
+    """Test the equity fundamental transcript endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -872,6 +1008,7 @@ def test_equity_fundamental_transcript(params, headers):
 )
 @pytest.mark.integration
 def test_equity_compare_peers(params, headers):
+    """Test the equity compare peers endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -887,6 +1024,7 @@ def test_equity_compare_peers(params, headers):
 )
 @pytest.mark.integration
 def test_equity_compare_groups(params, headers):
+    """Test the equity compare groups endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -901,45 +1039,21 @@ def test_equity_compare_groups(params, headers):
     [
         (
             {
-                "symbol": "AAPL",
-                "start_date": "2023-01-01",
-                "end_date": "2023-06-06",
-                "interval": "1d",
-                "provider": "yfinance",
-            }
-        ),
-        (
-            {
-                "adjusted": True,
+                "adjustment": "unadjusted",
                 "extended_hours": True,
-                "month": "2023-01",
-                "output_size": "full",
-                "provider": "alpha_vantage",
-                "symbol": "AAPL",
-                "start_date": "2023-01-01",
-                "end_date": "2023-01-02",
-                "interval": "1m",
-            }
-        ),
-        (
-            {
-                "adjusted": True,
-                "extended_hours": False,
-                "output_size": "full",
-                "month": "2023-01",
                 "provider": "alpha_vantage",
                 "symbol": "AAPL",
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
-                "interval": "1d",
+                "interval": "15m",
             }
         ),
         (
             {
                 "provider": "cboe",
                 "symbol": "AAPL",
-                "start_date": "2024-02-19",
-                "end_date": "2024-02-20",
+                "start_date": None,
+                "end_date": None,
                 "interval": "1m",
                 "use_cache": False,
             }
@@ -956,30 +1070,28 @@ def test_equity_compare_groups(params, headers):
         ),
         (
             {
-                "limit": "30",
-                "provider": "fmp",
-                "symbol": "AAPL",
-                "start_date": "2023-01-01",
-                "end_date": "2023-01-02",
-                "interval": "1m",
-            }
-        ),
-        (
-            {
-                "limit": "30",
                 "provider": "fmp",
                 "symbol": "AAPL",
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
                 "interval": "1d",
+            }
+        ),
+        (
+            {
+                "interval": "1h",
+                "provider": "fmp",
+                "symbol": "AAPL,MSFT",
+                "start_date": None,
+                "end_date": None,
             }
         ),
         (
             {
                 "timezone": "UTC",
                 "source": "realtime",
-                "start_time": time(5, 30, 0),
-                "end_time": time(12, 0, 0),
+                "start_time": None,
+                "end_time": None,
                 "provider": "intrinio",
                 "symbol": "AAPL",
                 "start_date": "2023-06-01",
@@ -989,10 +1101,10 @@ def test_equity_compare_groups(params, headers):
         ),
         (
             {
-                "timezone": "UTC",
-                "source": "realtime",
-                "start_time": time(5, 30, 0),
-                "end_time": time(12, 0, 0),
+                "timezone": None,
+                "source": "delayed",
+                "start_time": None,
+                "end_time": None,
                 "provider": "intrinio",
                 "symbol": "AAPL",
                 "start_date": "2023-01-01",
@@ -1004,45 +1116,45 @@ def test_equity_compare_groups(params, headers):
             {
                 "sort": "desc",
                 "limit": "49999",
-                "adjusted": "True",
+                "adjustment": "unadjusted",
                 "provider": "polygon",
                 "symbol": "AAPL",
                 "start_date": "2023-01-01",
-                "end_date": "2023-01-04",
+                "end_date": "2023-01-03",
                 "interval": "1m",
+                "extended_hours": False,
             }
         ),
         (
             {
                 "sort": "desc",
                 "limit": "49999",
-                "adjusted": "True",
+                "adjustment": "splits_only",
                 "provider": "polygon",
                 "symbol": "AAPL",
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
                 "interval": "1d",
+                "extended_hours": False,
             }
         ),
         (
             {
-                "prepost": False,
-                "include": True,
-                "adjusted": False,
-                "ignore_tz": True,
+                "extended_hours": False,
+                "include_actions": False,
+                "adjustment": "splits_only",
                 "provider": "yfinance",
                 "symbol": "AAPL",
-                "start_date": "2023-06-01",
-                "end_date": "2023-06-03",
+                "start_date": None,
+                "end_date": None,
                 "interval": "1h",
             }
         ),
         (
             {
-                "prepost": False,
-                "include": True,
-                "adjusted": False,
-                "ignore_tz": True,
+                "extended_hours": False,
+                "include_actions": True,
+                "adjustment": "splits_only",
                 "provider": "yfinance",
                 "symbol": "AAPL",
                 "start_date": "2023-01-01",
@@ -1070,6 +1182,26 @@ def test_equity_compare_groups(params, headers):
         ),
         (
             {
+                "provider": "tradier",
+                "symbol": "AAPL,MSFT",
+                "start_date": "2023-01-01",
+                "end_date": "2023-06-06",
+                "interval": "1M",
+                "extended_hours": False,
+            }
+        ),
+        (
+            {
+                "provider": "tradier",
+                "symbol": "AAPL,MSFT",
+                "start_date": None,
+                "end_date": None,
+                "interval": "15m",
+                "extended_hours": False,
+            }
+        ),
+        (
+            {
                 "provider": "tmx",
                 "symbol": "AAPL:US",
                 "start_date": "2023-01-01",
@@ -1082,8 +1214,7 @@ def test_equity_compare_groups(params, headers):
 )
 @pytest.mark.integration
 def test_equity_price_historical(params, headers):
-    if params.get("provider") == "alpha_vantage":
-        pytest.skip("Alpha Vantage is premium.")
+    """Test the equity price historical endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1100,6 +1231,7 @@ def test_equity_price_historical(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_multiples(params, headers):
+    """Test the equity fundamental multiples endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1117,6 +1249,7 @@ def test_equity_fundamental_multiples(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_search_attributes(params, headers):
+    """Test the equity fundamental search attributes endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1198,6 +1331,7 @@ def test_equity_fundamental_search_attributes(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_historical_attributes(params, headers):
+    """Test the equity fundamental historical attributes endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1256,6 +1390,7 @@ def test_equity_fundamental_historical_attributes(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_latest_attributes(params, headers):
+    """Test the equity fundamental latest attributes endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1270,21 +1405,22 @@ def test_equity_fundamental_latest_attributes(params, headers):
     [
         ({"query": "AAPl", "is_symbol": True, "provider": "cboe", "use_cache": False}),
         ({"query": "Apple", "provider": "sec", "use_cache": False, "is_fund": False}),
-        ({"query": "", "provider": "nasdaq", "use_cache": False, "is_etf": True}),
+        ({"query": "", "provider": "nasdaq", "is_etf": True}),
         ({"query": "gold", "provider": "tmx", "use_cache": False}),
+        ({"query": "gold", "provider": "tradier", "is_symbol": False}),
         (
             {
                 "query": "gold",
                 "provider": "intrinio",
                 "active": True,
                 "limit": 100,
-                "use_cache": None,
             }
         ),
     ],
 )
 @pytest.mark.integration
 def test_equity_search(params, headers):
+    """Test the equity search endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1300,7 +1436,7 @@ def test_equity_search(params, headers):
         (
             {
                 "industry": "REIT",
-                "sector": "Real Estate",
+                "sector": "real_estate",
                 "mktcap_min": None,
                 "mktcap_max": None,
                 "price_min": None,
@@ -1319,10 +1455,58 @@ def test_equity_search(params, headers):
                 "provider": "fmp",
             }
         ),
+        (
+            {
+                "sector": "consumer_staples,consumer_discretionary",
+                "exchange": "all",
+                "exsubcategory": "all",
+                "region": "all",
+                "country": "all",
+                "mktcap": "large",
+                "recommendation": "all",
+                "limit": None,
+                "provider": "nasdaq",
+            }
+        ),
+        (
+            {
+                "metric": "overview",
+                "signal": None,
+                "preset": None,
+                "filters_dict": None,
+                "sector": "consumer_defensive",
+                "industry": "grocery_stores",
+                "index": "all",
+                "exchange": "all",
+                "mktcap": "all",
+                "recommendation": "all",
+                "limit": None,
+                "provider": "finviz",
+            }
+        ),
+        (
+            {
+                "country": "us",
+                "sector": "consumer_cyclical",
+                "industry": "auto_manufacturers",
+                "exchange": None,
+                "mktcap_min": 60000000000,
+                "mktcap_max": None,
+                "price_min": 10,
+                "price_max": None,
+                "volume_min": 5000000,
+                "volume_max": None,
+                "beta_min": None,
+                "beta_max": None,
+                "provider": "yfinance",
+                "limit": 200,
+            }
+        ),
     ],
 )
 @pytest.mark.integration
 def test_equity_screener(params, headers):
+    """Test the equity screener endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1340,10 +1524,12 @@ def test_equity_screener(params, headers):
         ({"symbol": "AAPL", "provider": "cboe", "use_cache": False}),
         ({"symbol": "AAPL", "provider": "yfinance"}),
         ({"symbol": "AAPL:US", "provider": "tmx"}),
+        ({"symbol": "AAPL,MSFT", "provider": "tradier"}),
     ],
 )
 @pytest.mark.integration
 def test_equity_price_quote(params, headers):
+    """Test the equity price quote endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1366,6 +1552,7 @@ def test_equity_price_quote(params, headers):
 )
 @pytest.mark.integration
 def test_equity_profile(params, headers):
+    """Test the equity profile endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1378,12 +1565,13 @@ def test_equity_profile(params, headers):
 @parametrize(
     "params",
     [
-        ({"sort": "desc", "provider": "yfinance"}),
+        ({"sort": "desc", "provider": "yfinance", "limit": 10}),
         ({"provider": "tmx", "category": "52w_high"}),
     ],
 )
 @pytest.mark.integration
 def test_equity_discovery_gainers(params, headers):
+    """Test the equity discovery gainers endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1395,10 +1583,11 @@ def test_equity_discovery_gainers(params, headers):
 
 @parametrize(
     "params",
-    [({"sort": "desc", "provider": "yfinance"})],
+    [({"sort": "desc", "provider": "yfinance", "limit": 10})],
 )
 @pytest.mark.integration
 def test_equity_discovery_losers(params, headers):
+    """Test the equity discovery losers endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1410,10 +1599,11 @@ def test_equity_discovery_losers(params, headers):
 
 @parametrize(
     "params",
-    [({"sort": "desc", "provider": "yfinance"})],
+    [({"sort": "desc", "provider": "yfinance", "limit": 10})],
 )
 @pytest.mark.integration
 def test_equity_discovery_active(params, headers):
+    """Test the equity discovery active endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1432,6 +1622,7 @@ def test_equity_discovery_active(params, headers):
 )
 @pytest.mark.integration
 def test_equity_price_performance(params, headers):
+    """Test the equity price performance endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1443,10 +1634,11 @@ def test_equity_price_performance(params, headers):
 
 @parametrize(
     "params",
-    [({"sort": "desc", "provider": "yfinance"})],
+    [({"sort": "desc", "provider": "yfinance", "limit": 10})],
 )
 @pytest.mark.integration
 def test_equity_discovery_undervalued_large_caps(params, headers):
+    """Test the equity discovery undervalued large caps endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1458,10 +1650,11 @@ def test_equity_discovery_undervalued_large_caps(params, headers):
 
 @parametrize(
     "params",
-    [({"sort": "desc", "provider": "yfinance"})],
+    [({"sort": "desc", "provider": "yfinance", "limit": 10})],
 )
 @pytest.mark.integration
 def test_equity_discovery_undervalued_growth(params, headers):
+    """Test the equity discovery undervalued growth endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1473,10 +1666,11 @@ def test_equity_discovery_undervalued_growth(params, headers):
 
 @parametrize(
     "params",
-    [({"sort": "desc", "provider": "yfinance"})],
+    [({"sort": "desc", "provider": "yfinance", "limit": 10})],
 )
 @pytest.mark.integration
 def test_equity_discovery_aggressive_small_caps(params, headers):
+    """Test the equity discovery aggressive small caps endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1490,10 +1684,11 @@ def test_equity_discovery_aggressive_small_caps(params, headers):
 
 @parametrize(
     "params",
-    [({"sort": "desc", "provider": "yfinance"})],
+    [({"sort": "desc", "provider": "yfinance", "limit": 10})],
 )
 @pytest.mark.integration
 def test_equity_discovery_growth_tech(params, headers):
+    """Test the equity discovery growth tech endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1509,28 +1704,12 @@ def test_equity_discovery_growth_tech(params, headers):
 )
 @pytest.mark.integration
 def test_equity_discovery_top_retail(params, headers):
+    """Test the equity discovery top retail endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
     url = f"http://0.0.0.0:8000/api/v1/equity/discovery/top_retail?{query_str}"
     result = requests.get(url, headers=headers, timeout=10)
-    assert isinstance(result, requests.Response)
-    assert result.status_code == 200
-
-
-@parametrize(
-    "params",
-    [({"provider": "seeking_alpha"})],
-)
-@pytest.mark.integration
-def test_equity_discovery_upcoming_release_days(params, headers):
-    params = {p: v for p, v in params.items() if v}
-
-    query_str = get_querystring(params, [])
-    url = (
-        f"http://0.0.0.0:8000/api/v1/equity/discovery/upcoming_release_days?{query_str}"
-    )
-    result = requests.get(url, headers=headers, timeout=30)
     assert isinstance(result, requests.Response)
     assert result.status_code == 200
 
@@ -1562,6 +1741,7 @@ def test_equity_discovery_upcoming_release_days(params, headers):
 )
 @pytest.mark.integration
 def test_equity_discovery_filings(params, headers):
+    """Test the equity discovery filings endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1575,11 +1755,20 @@ def test_equity_discovery_filings(params, headers):
     "params",
     [
         ({"symbol": "AAPL"}),
-        ({"limit": 24, "provider": "sec", "symbol": "AAPL", "skip_reports": 1}),
+        (
+            {
+                "limit": 24,
+                "provider": "sec",
+                "symbol": "AAPL",
+                "skip_reports": 1,
+                "use_cache": False,
+            }
+        ),
     ],
 )
 @pytest.mark.integration
 def test_equity_shorts_fails_to_deliver(params, headers):
+    """Test the equity shorts fails to deliver endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1595,6 +1784,7 @@ def test_equity_shorts_fails_to_deliver(params, headers):
 )
 @pytest.mark.integration
 def test_equity_shorts_short_volume(params, headers):
+    """Test the equity shorts short volume endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1610,6 +1800,7 @@ def test_equity_shorts_short_volume(params, headers):
 )
 @pytest.mark.integration
 def test_equity_shorts_short_interest(params, headers):
+    """Test the equity shorts short interest endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1638,6 +1829,7 @@ def test_equity_shorts_short_interest(params, headers):
 )
 @pytest.mark.integration
 def test_equity_price_nbbo(params, headers):
+    """Test the equity price NBBO endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1656,6 +1848,7 @@ def test_equity_price_nbbo(params, headers):
 )
 @pytest.mark.integration
 def test_equity_darkpool_otc(params, headers):
+    """Test the equity darkpool otc endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1673,12 +1866,14 @@ def test_equity_darkpool_otc(params, headers):
 @parametrize(
     "params",
     [
-        ({"provider": "fmp", "market": "EURONEXT"}),
-        ({"provider": "polygon"}),  # premium endpoint
+        ({"provider": "fmp", "market": "euronext"}),
+        ({"provider": "polygon"}),
+        ({"provider": "intrinio", "date": "2022-06-30"}),
     ],
 )
 @pytest.mark.integration
 def test_equity_market_snapshots(params, headers):
+    """Test the equity market snapshots endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1692,10 +1887,19 @@ def test_equity_market_snapshots(params, headers):
     "params",
     [
         ({"symbol": "AAPL", "limit": 5, "provider": "fmp"}),
+        (
+            {
+                "symbol": "AAPL",
+                "period": "quarter",
+                "limit": 5,
+                "provider": "alpha_vantage",
+            }
+        ),
     ],
 )
 @pytest.mark.integration
 def test_equity_fundamental_historical_eps(params, headers):
+    """Test the equity fundamental historical eps endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1711,6 +1915,7 @@ def test_equity_fundamental_historical_eps(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_trailing_dividend_yield(params, headers):
+    """Test the equity fundamental trailing dividend yield endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
@@ -1757,12 +1962,284 @@ def test_equity_fundamental_trailing_dividend_yield(params, headers):
 )
 @pytest.mark.integration
 def test_equity_fundamental_reported_financials(params, headers):
+    """Test the equity fundamental reported financials endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     query_str = get_querystring(params, [])
     url = (
         f"http://0.0.0.0:8000/api/v1/equity/fundamental/reported_financials?{query_str}"
     )
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "NVDA",
+                "date": None,
+                "limit": 1,
+                "provider": "sec",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_ownership_form_13f(params, headers):
+    """Test the equity ownership form 13f endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/ownership/form_13f?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "NVDA,MSFT",
+                "provider": "intrinio",
+            }
+        ),
+        (
+            {
+                "symbol": None,
+                "provider": "intrinio",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_estimates_forward_pe(params, headers):
+    """Test the equity estimates forward_pe endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/estimates/forward_pe?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "fiscal_period": "quarter",
+                "provider": "intrinio",
+            }
+        ),
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "fiscal_period": "annual",
+                "limit": None,
+                "include_historical": False,
+                "provider": "fmp",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_estimates_forward_ebitda(params, headers):
+    """Test the equity estimates forward_ebitda endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/estimates/forward_ebitda?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "provider": "sec",
+                "symbol": "NVDA,AAPL,AMZN,MSFT,GOOG,SMCI",
+                "fact": "RevenueFromContractWithCustomerExcludingAssessedTax",
+                "year": 2024,
+                "fiscal_period": None,
+                "instantaneous": False,
+                "use_cache": False,
+            }
+        ),
+        (
+            {
+                "provider": "sec",
+                "symbol": None,
+                "fact": None,
+                "year": None,
+                "fiscal_period": None,
+                "instantaneous": False,
+                "use_cache": False,
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_compare_company_facts(params, headers):
+    """Test the equity compare company_facts endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/compare/company_facts?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "start_date": None,
+                "end_date": None,
+                "provider": "fmp",
+            }
+        ),
+        (
+            {
+                "symbol": "AAPL,MSFT",
+                "start_date": None,
+                "end_date": None,
+                "provider": "intrinio",
+                "interval": "week",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_historical_market_cap(params, headers):
+    """Test the equity historical market cap endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/historical_market_cap?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "date": None,
+                "report_type": None,
+                "provider": "sec",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_discovery_latest_financial_reports(params, headers):
+    """Test the equity discovery latest financial reports endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/discovery/latest_financial_reports?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "chamber": "all",
+                "symbol": "AAPL",
+                "provider": "fmp",
+                "limit": None,
+            }
+        ),
+        (
+            {
+                "symbol": None,
+                "chamber": "all",
+                "limit": 300,
+                "provider": "fmp",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_ownership_government_trades(params, headers):
+    """Test the equity ownership government trades endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/ownership/government_trades?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "symbol": "AAPL",
+                "calendar_year": 2024,
+                "calendar_period": "Q2",
+                "wrap_length": 120,
+                "include_tables": False,
+                "use_cache": True,
+                "raw_html": False,
+                "strategy": "trafilatura",
+                "provider": "sec",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_fundamental_management_discussion_analysis(params, headers):
+    """Test the equity fundamental management discussion analysis endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/fundamental/management_discussion_analysis?{query_str}"
+    result = requests.get(url, headers=headers, timeout=10)
+    assert isinstance(result, requests.Response)
+    assert result.status_code == 200
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "start_date": "2024-01-07",
+                "end_date": "2024-01-10",
+                "provider": "fmp",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_equity_calendar_events(params, headers):
+    """Test the equity calendar events endpoint."""
+    params = {p: v for p, v in params.items() if v}
+
+    query_str = get_querystring(params, [])
+    url = f"http://0.0.0.0:8000/api/v1/equity/calendar/events?{query_str}"
     result = requests.get(url, headers=headers, timeout=10)
     assert isinstance(result, requests.Response)
     assert result.status_code == 200

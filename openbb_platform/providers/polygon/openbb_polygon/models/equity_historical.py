@@ -1,10 +1,10 @@
 """Polygon Equity Historical Price Model."""
 
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument,protected-access
 
-import warnings
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
+from warnings import warn
 
 from dateutil.relativedelta import relativedelta
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -14,20 +14,12 @@ from openbb_core.provider.standard_models.equity_historical import (
 )
 from openbb_core.provider.utils.descriptions import QUERY_DESCRIPTIONS
 from openbb_core.provider.utils.errors import EmptyDataError
-from openbb_core.provider.utils.helpers import (
-    ClientResponse,
-    ClientSession,
-    amake_requests,
-)
 from pydantic import (
     Field,
     PositiveInt,
     PrivateAttr,
     model_validator,
 )
-from pytz import timezone
-
-_warn = warnings.warn
 
 
 class PolygonEquityHistoricalQueryParams(EquityHistoricalQueryParams):
@@ -36,25 +28,34 @@ class PolygonEquityHistoricalQueryParams(EquityHistoricalQueryParams):
     Source: https://polygon.io/docs/stocks/getting-started
     """
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
     interval: str = Field(
-        default="1d", description=QUERY_DESCRIPTIONS.get("interval", "")
+        default="1d",
+        description=QUERY_DESCRIPTIONS.get("interval", "")
+        + " The numeric portion of the interval can be any positive integer."
+        + " The letter portion can be one of the following: s, m, h, d, W, M, Q, Y",
+    )
+    adjustment: Literal["splits_only", "unadjusted"] = Field(
+        default="splits_only",
+        description="The adjustment factor to apply. Default is splits only.",
+    )
+    extended_hours: bool = Field(
+        default=False,
+        description="Include Pre and Post market data.",
     )
     sort: Literal["asc", "desc"] = Field(
-        default="desc", description="Sort order of the data."
+        default="asc",
+        description="Sort order of the data."
+        + " This impacts the results in combination with the 'limit' parameter."
+        + " The results are always returned in ascending order by date.",
     )
     limit: PositiveInt = Field(
         default=49999, description=QUERY_DESCRIPTIONS.get("limit", "")
     )
-    adjusted: bool = Field(
-        default=True,
-        description="Output time series is adjusted by historical split and dividend events.",
-    )
     _multiplier: PositiveInt = PrivateAttr(default=None)
     _timespan: str = PrivateAttr(default=None)
 
-    # pylint: disable=protected-access
     @model_validator(mode="after")
     @classmethod
     def get_api_interval_params(cls, values: "PolygonEquityHistoricalQueryParams"):
@@ -87,12 +88,12 @@ class PolygonEquityHistoricalData(EquityHistoricalData):
         "close": "c",
         "volume": "v",
         "vwap": "vw",
+        "transactions": "n",
     }
 
     transactions: Optional[PositiveInt] = Field(
         default=None,
         description="Number of transactions for the symbol in the time period.",
-        alias="n",
     )
 
 
@@ -102,7 +103,7 @@ class PolygonEquityHistoricalFetcher(
         List[PolygonEquityHistoricalData],
     ]
 ):
-    """Transform the query, extract and transform the data from the Polygon endpoints."""
+    """Polygon Equity Historical Fetcher."""
 
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> PolygonEquityHistoricalQueryParams:
@@ -124,13 +125,22 @@ class PolygonEquityHistoricalFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the Polygon endpoint."""
-        api_key = credentials.get("polygon_api_key") if credentials else ""
+        # pylint: disable=import-outside-toplevel
+        from openbb_core.provider.utils.helpers import (  # noqa
+            ClientResponse,
+            ClientSession,
+            amake_requests,
+            safe_fromtimestamp,
+        )
+        from pytz import timezone
 
+        api_key = credentials.get("polygon_api_key") if credentials else ""
+        adjustment = query.adjustment == "splits_only"
         urls = [
             (
                 "https://api.polygon.io/v2/aggs/ticker/"
                 f"{symbol.upper()}/range/{query._multiplier}/{query._timespan}/"
-                f"{query.start_date}/{query.end_date}?adjusted={query.adjusted}"
+                f"{query.start_date}/{query.end_date}?adjusted={adjustment}"
                 f"&sort={query.sort}&limit={query.limit}&apiKey={api_key}"
             )
             for symbol in query.symbol.split(",")
@@ -142,19 +152,18 @@ class PolygonEquityHistoricalFetcher(
             data = await response.json()
 
             symbol = response.url.parts[4]
-            next_url = data.get("next_url", None)
-            results: list = data.get("results", [])
+            next_url = data.get("next_url", None)  # type: ignore
+            results: list = data.get("results", [])  # type: ignore
 
             while next_url:
                 url = f"{next_url}&apiKey={api_key}"
                 data = await session.get_json(url)
-                results.extend(data.get("results", []))
-                next_url = data.get("next_url", None)
+                results.extend(data.get("results", []))  # type: ignore
+                next_url = data.get("next_url", None)  # type: ignore
 
             for r in results:
-                r["t"] = datetime.fromtimestamp(
-                    r["t"] / 1000, tz=timezone("America/New_York")
-                )
+                v = r["t"] / 1000  # milliseconds to seconds
+                r["t"] = safe_fromtimestamp(v, tz=timezone("America/New_York"))  # type: ignore[arg-type]
                 if query._timespan not in ["second", "minute", "hour"]:
                     r["t"] = r["t"].date().strftime("%Y-%m-%d")
                 else:
@@ -163,7 +172,7 @@ class PolygonEquityHistoricalFetcher(
                     r["symbol"] = symbol
 
             if results == []:
-                _warn(f"Symbol Error: No data found for {symbol}")
+                warn(f"Symbol Error: No data found for {symbol}")
 
             return results
 
@@ -176,9 +185,26 @@ class PolygonEquityHistoricalFetcher(
         **kwargs: Any,
     ) -> List[PolygonEquityHistoricalData]:
         """Transform the data from the Polygon endpoint."""
+        # pylint: disable=import-outside-toplevel
+        from pandas import to_datetime
+
         if not data:
             raise EmptyDataError()
+        if query.extended_hours is True or query._timespan not in [
+            "second",
+            "minute",
+            "hour",
+        ]:
+            return [
+                PolygonEquityHistoricalData.model_validate(d)
+                for d in sorted(data, key=lambda x: x["t"], reverse=False)
+            ]
+
         return [
             PolygonEquityHistoricalData.model_validate(d)
             for d in sorted(data, key=lambda x: x["t"], reverse=False)
+            if to_datetime(d["t"]).time()
+            >= datetime.strptime("09:30:00", "%H:%M:%S").time()
+            and to_datetime(d["t"]).time()
+            <= datetime.strptime("16:00:00", "%H:%M:%S").time()
         ]

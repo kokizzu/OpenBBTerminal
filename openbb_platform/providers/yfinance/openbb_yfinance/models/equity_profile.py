@@ -1,9 +1,7 @@
 """YFinance Equity Profile Model."""
 
 # pylint: disable=unused-argument
-import asyncio
-import warnings
-from datetime import datetime
+
 from typing import Any, Dict, List, Optional
 
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -12,15 +10,12 @@ from openbb_core.provider.standard_models.equity_info import (
     EquityInfoQueryParams,
 )
 from pydantic import Field, field_validator
-from yfinance import Ticker
-
-_warn = warnings.warn
 
 
 class YFinanceEquityProfileQueryParams(EquityInfoQueryParams):
     """YFinance Equity Profile Query."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class YFinanceEquityProfileData(EquityInfoData):
@@ -43,16 +38,20 @@ class YFinanceEquityProfileData(EquityInfoData):
         "long_description": "longBusinessSummary",
         "employees": "fullTimeEmployees",
         "market_cap": "marketCap",
-        "dividend_yield": "dividendYield",
+        "shares_outstanding": "sharesOutstanding",
+        "shares_float": "floatShares",
+        "shares_implied_outstanding": "impliedSharesOutstanding",
+        "shares_short": "sharesShort",
+        "dividend_yield": "yield",
     }
 
     exchange_timezone: Optional[str] = Field(
         description="The timezone of the exchange.",
         default=None,
-        alias="timeZoneFullName",
     )
     issue_type: Optional[str] = Field(
-        description="The issuance type of the asset.", default=None, alias="issueType"
+        description="The issuance type of the asset.",
+        default=None,
     )
     currency: Optional[str] = Field(
         description="The currency in which the asset is traded.", default=None
@@ -64,12 +63,10 @@ class YFinanceEquityProfileData(EquityInfoData):
     shares_outstanding: Optional[int] = Field(
         description="The number of listed shares outstanding.",
         default=None,
-        alias="sharesOutstanding",
     )
     shares_float: Optional[int] = Field(
         description="The number of shares in the public float.",
         default=None,
-        alias="floatShares",
     )
     shares_implied_outstanding: Optional[int] = Field(
         description=(
@@ -77,18 +74,15 @@ class YFinanceEquityProfileData(EquityInfoData):
             "assuming the conversion of all convertible subsidiary equity into common."
         ),
         default=None,
-        alias="impliedSharesOutstanding",
     )
     shares_short: Optional[int] = Field(
         description="The reported number of shares short.",
         default=None,
-        alias="sharesShort",
     )
     dividend_yield: Optional[float] = Field(
         description="The dividend yield of the asset, as a normalized percent.",
         default=None,
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
-        alias="yield",
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     beta: Optional[float] = Field(
         description="The beta of the asset relative to the broad market.",
@@ -99,7 +93,11 @@ class YFinanceEquityProfileData(EquityInfoData):
     @classmethod
     def validate_first_trade_date(cls, v):
         """Validate first stock price date."""
-        return datetime.utcfromtimestamp(v).date() if v else None
+        # pylint: disable=import-outside-toplevel
+        from datetime import timezone  # noqa
+        from openbb_core.provider.utils.helpers import safe_fromtimestamp  # noqa
+
+        return safe_fromtimestamp(v, tz=timezone.utc).date() if v else None
 
 
 class YFinanceEquityProfileFetcher(
@@ -119,6 +117,14 @@ class YFinanceEquityProfileFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Extract the raw data from YFinance."""
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        from openbb_core.app.model.abstract.error import OpenBBError
+        from openbb_core.provider.utils.errors import EmptyDataError
+        from openbb_core.provider.utils.helpers import get_requests_session
+        from warnings import warn
+        from yfinance import Ticker
+
         symbols = query.symbol.split(",")
         results = []
         fields = [
@@ -149,25 +155,47 @@ class YFinanceEquityProfileFetcher(
             "dividendYield",
             "beta",
         ]
+        messages: list = []
+        session = get_requests_session()
 
         async def get_one(symbol):
             """Get the data for one ticker symbol."""
-            result = {}
-            ticker = {}
+            result: dict = {}
+            ticker: dict = {}
             try:
-                ticker = Ticker(symbol).get_info()
+                ticker = Ticker(
+                    symbol,
+                    session=session,
+                    proxy=session.proxies if session.proxies else None,
+                ).get_info()
             except Exception as e:
-                _warn(f"Error getting data for {symbol}: {e}")
+                messages.append(
+                    f"Error getting data for {symbol} -> {e.__class__.__name__}: {e}"
+                )
             if ticker:
                 for field in fields:
                     if field in ticker:
-                        result[field] = ticker.get(field, None)
+                        result[
+                            field.replace("dividendYield", "dividend_yield").replace(
+                                "issueType", "issue_type"
+                            )
+                        ] = ticker.get(field, None)
                 if result:
                     results.append(result)
 
         tasks = [get_one(symbol) for symbol in symbols]
 
         await asyncio.gather(*tasks)
+
+        if not results and messages:
+            raise OpenBBError("\n".join(messages))
+
+        if not results and not messages:
+            raise EmptyDataError("No data was returned for any symbol")
+
+        if results and messages:
+            for message in messages:
+                warn(message)
 
         return results
 

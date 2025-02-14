@@ -3,10 +3,10 @@
 import datetime
 from typing import Literal, Optional, Union
 
-from openbb_core.app.model.custom_parameter import OpenBBCustomParameter
+from openbb_core.app.model.field import OpenBBField
 from openbb_core.app.model.obbject import OBBject
 from openbb_core.app.static.container import Container
-from openbb_core.app.static.utils.decorators import validate
+from openbb_core.app.static.utils.decorators import exception_handler, validate
 from openbb_core.app.static.utils.filters import filter_inputs
 from typing_extensions import Annotated
 
@@ -21,26 +21,27 @@ class ROUTER_fixedincome_spreads(Container):
     def __repr__(self) -> str:
         return self.__doc__ or ""
 
+    @exception_handler
     @validate
     def tcm(
         self,
         start_date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(
-                description="Start date of the data, in YYYY-MM-DD format."
-            ),
+            OpenBBField(description="Start date of the data, in YYYY-MM-DD format."),
         ] = None,
         end_date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(
-                description="End date of the data, in YYYY-MM-DD format."
-            ),
+            OpenBBField(description="End date of the data, in YYYY-MM-DD format."),
         ] = None,
         maturity: Annotated[
-            Optional[Literal["3m", "2y"]],
-            OpenBBCustomParameter(description="The maturity"),
+            Optional[Literal["3m", "2y"]], OpenBBField(description="The maturity")
         ] = "3m",
-        provider: Optional[Literal["fred"]] = None,
+        provider: Annotated[
+            Optional[Literal["fred"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fred."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
         """Treasury Constant Maturity.
@@ -51,44 +52,43 @@ class ROUTER_fixedincome_spreads(Container):
         yield curve which, in turn, is based on closing bid-yields of actively-traded Treasury securities.
 
 
-            Parameters
-            ----------
-            start_date : Union[datetime.date, None, str]
-                Start date of the data, in YYYY-MM-DD format.
-            end_date : Union[datetime.date, None, str]
-                End date of the data, in YYYY-MM-DD format.
-            maturity : Optional[Literal['3m', '2y']]
-                The maturity
+        Parameters
+        ----------
+        start_date : Union[date, None, str]
+            Start date of the data, in YYYY-MM-DD format.
+        end_date : Union[date, None, str]
+            End date of the data, in YYYY-MM-DD format.
+        maturity : Optional[Literal['3m', '2y']]
+            The maturity
+        provider : Optional[Literal['fred']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fred.
+
+        Returns
+        -------
+        OBBject
+            results : List[TreasuryConstantMaturity]
+                Serializable results.
             provider : Optional[Literal['fred']]
-                The provider to use for the query, by default None.
-                If None, the provider specified in defaults is selected or 'fred' if there is
-                no default.
+                Provider name.
+            warnings : Optional[List[Warning_]]
+                List of warnings.
+            chart : Optional[Chart]
+                Chart object.
+            extra : Dict[str, Any]
+                Extra info.
 
-            Returns
-            -------
-            OBBject
-                results : List[TreasuryConstantMaturity]
-                    Serializable results.
-                provider : Optional[Literal['fred']]
-                    Provider name.
-                warnings : Optional[List[Warning_]]
-                    List of warnings.
-                chart : Optional[Chart]
-                    Chart object.
-                extra: Dict[str, Any]
-                    Extra info.
+        TreasuryConstantMaturity
+        ------------------------
+        date : date
+            The date of the data.
+        rate : Optional[float]
+            TreasuryConstantMaturity Rate.
 
-            TreasuryConstantMaturity
-            ------------------------
-            date : date
-                The date of the data.
-            rate : Optional[float]
-                TreasuryConstantMaturity Rate.
-
-            Example
-            -------
-            >>> from openbb import obb
-            >>> obb.fixedincome.fixedincome.spreads.tcm(maturity="2y")
+        Examples
+        --------
+        >>> from openbb import obb
+        >>> obb.fixedincome.spreads.tcm(provider='fred')
+        >>> obb.fixedincome.spreads.tcm(maturity='2y', provider='fred')
         """  # noqa: E501
 
         return self._run(
@@ -97,7 +97,7 @@ class ROUTER_fixedincome_spreads(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/fixedincome/spreads/tcm",
+                        "fixedincome.spreads.tcm",
                         ("fred",),
                     )
                 },
@@ -110,26 +110,28 @@ class ROUTER_fixedincome_spreads(Container):
             )
         )
 
+    @exception_handler
     @validate
     def tcm_effr(
         self,
         start_date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(
-                description="Start date of the data, in YYYY-MM-DD format."
-            ),
+            OpenBBField(description="Start date of the data, in YYYY-MM-DD format."),
         ] = None,
         end_date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(
-                description="End date of the data, in YYYY-MM-DD format."
-            ),
+            OpenBBField(description="End date of the data, in YYYY-MM-DD format."),
         ] = None,
         maturity: Annotated[
             Optional[Literal["10y", "5y", "1y", "6m", "3m"]],
-            OpenBBCustomParameter(description="The maturity"),
+            OpenBBField(description="The maturity"),
         ] = "10y",
-        provider: Optional[Literal["fred"]] = None,
+        provider: Annotated[
+            Optional[Literal["fred"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fred."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
         """Select Treasury Constant Maturity.
@@ -140,44 +142,43 @@ class ROUTER_fixedincome_spreads(Container):
         yield curve which, in turn, is based on closing bid-yields of actively-traded Treasury securities.
 
 
-            Parameters
-            ----------
-            start_date : Union[datetime.date, None, str]
-                Start date of the data, in YYYY-MM-DD format.
-            end_date : Union[datetime.date, None, str]
-                End date of the data, in YYYY-MM-DD format.
-            maturity : Optional[Literal['10y', '5y', '1y', '6m', '3m']]
-                The maturity
+        Parameters
+        ----------
+        start_date : Union[date, None, str]
+            Start date of the data, in YYYY-MM-DD format.
+        end_date : Union[date, None, str]
+            End date of the data, in YYYY-MM-DD format.
+        maturity : Optional[Literal['10y', '5y', '1y', '6m', '3m']]
+            The maturity
+        provider : Optional[Literal['fred']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fred.
+
+        Returns
+        -------
+        OBBject
+            results : List[SelectedTreasuryConstantMaturity]
+                Serializable results.
             provider : Optional[Literal['fred']]
-                The provider to use for the query, by default None.
-                If None, the provider specified in defaults is selected or 'fred' if there is
-                no default.
+                Provider name.
+            warnings : Optional[List[Warning_]]
+                List of warnings.
+            chart : Optional[Chart]
+                Chart object.
+            extra : Dict[str, Any]
+                Extra info.
 
-            Returns
-            -------
-            OBBject
-                results : List[SelectedTreasuryConstantMaturity]
-                    Serializable results.
-                provider : Optional[Literal['fred']]
-                    Provider name.
-                warnings : Optional[List[Warning_]]
-                    List of warnings.
-                chart : Optional[Chart]
-                    Chart object.
-                extra: Dict[str, Any]
-                    Extra info.
+        SelectedTreasuryConstantMaturity
+        --------------------------------
+        date : date
+            The date of the data.
+        rate : Optional[float]
+            Selected Treasury Constant Maturity Rate.
 
-            SelectedTreasuryConstantMaturity
-            --------------------------------
-            date : date
-                The date of the data.
-            rate : Optional[float]
-                Selected Treasury Constant Maturity Rate.
-
-            Example
-            -------
-            >>> from openbb import obb
-            >>> obb.fixedincome.fixedincome.spreads.tcm_effr(maturity="10y")
+        Examples
+        --------
+        >>> from openbb import obb
+        >>> obb.fixedincome.spreads.tcm_effr(provider='fred')
+        >>> obb.fixedincome.spreads.tcm_effr(maturity='10y', provider='fred')
         """  # noqa: E501
 
         return self._run(
@@ -186,7 +187,7 @@ class ROUTER_fixedincome_spreads(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/fixedincome/spreads/tcm_effr",
+                        "fixedincome.spreads.tcm_effr",
                         ("fred",),
                     )
                 },
@@ -199,26 +200,27 @@ class ROUTER_fixedincome_spreads(Container):
             )
         )
 
+    @exception_handler
     @validate
     def treasury_effr(
         self,
         start_date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(
-                description="Start date of the data, in YYYY-MM-DD format."
-            ),
+            OpenBBField(description="Start date of the data, in YYYY-MM-DD format."),
         ] = None,
         end_date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(
-                description="End date of the data, in YYYY-MM-DD format."
-            ),
+            OpenBBField(description="End date of the data, in YYYY-MM-DD format."),
         ] = None,
         maturity: Annotated[
-            Optional[Literal["3m", "6m"]],
-            OpenBBCustomParameter(description="The maturity"),
+            Optional[Literal["3m", "6m"]], OpenBBField(description="The maturity")
         ] = "3m",
-        provider: Optional[Literal["fred"]] = None,
+        provider: Annotated[
+            Optional[Literal["fred"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fred."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
         """Select Treasury Bill.
@@ -230,44 +232,43 @@ class ROUTER_fixedincome_spreads(Container):
         yield curve which, in turn, is based on closing bid-yields of actively-traded Treasury securities.
 
 
-            Parameters
-            ----------
-            start_date : Union[datetime.date, None, str]
-                Start date of the data, in YYYY-MM-DD format.
-            end_date : Union[datetime.date, None, str]
-                End date of the data, in YYYY-MM-DD format.
-            maturity : Optional[Literal['3m', '6m']]
-                The maturity
+        Parameters
+        ----------
+        start_date : Union[date, None, str]
+            Start date of the data, in YYYY-MM-DD format.
+        end_date : Union[date, None, str]
+            End date of the data, in YYYY-MM-DD format.
+        maturity : Optional[Literal['3m', '6m']]
+            The maturity
+        provider : Optional[Literal['fred']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fred.
+
+        Returns
+        -------
+        OBBject
+            results : List[SelectedTreasuryBill]
+                Serializable results.
             provider : Optional[Literal['fred']]
-                The provider to use for the query, by default None.
-                If None, the provider specified in defaults is selected or 'fred' if there is
-                no default.
+                Provider name.
+            warnings : Optional[List[Warning_]]
+                List of warnings.
+            chart : Optional[Chart]
+                Chart object.
+            extra : Dict[str, Any]
+                Extra info.
 
-            Returns
-            -------
-            OBBject
-                results : List[SelectedTreasuryBill]
-                    Serializable results.
-                provider : Optional[Literal['fred']]
-                    Provider name.
-                warnings : Optional[List[Warning_]]
-                    List of warnings.
-                chart : Optional[Chart]
-                    Chart object.
-                extra: Dict[str, Any]
-                    Extra info.
+        SelectedTreasuryBill
+        --------------------
+        date : date
+            The date of the data.
+        rate : Optional[float]
+            SelectedTreasuryBill Rate.
 
-            SelectedTreasuryBill
-            --------------------
-            date : date
-                The date of the data.
-            rate : Optional[float]
-                SelectedTreasuryBill Rate.
-
-            Example
-            -------
-            >>> from openbb import obb
-            >>> obb.fixedincome.fixedincome.spreads.treasury_effr(maturity="6m")
+        Examples
+        --------
+        >>> from openbb import obb
+        >>> obb.fixedincome.spreads.treasury_effr(provider='fred')
+        >>> obb.fixedincome.spreads.treasury_effr(maturity='6m', provider='fred')
         """  # noqa: E501
 
         return self._run(
@@ -276,7 +277,7 @@ class ROUTER_fixedincome_spreads(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/fixedincome/spreads/treasury_effr",
+                        "fixedincome.spreads.treasury_effr",
                         ("fred",),
                     )
                 },

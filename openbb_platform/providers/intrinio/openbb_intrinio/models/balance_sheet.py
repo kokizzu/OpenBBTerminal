@@ -1,19 +1,19 @@
 """Intrinio Balance Sheet Model."""
 
 # pylint: disable=unused-argument
-import warnings
+
 from typing import Any, Dict, List, Literal, Optional
+from warnings import warn
 
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.balance_sheet import (
     BalanceSheetData,
     BalanceSheetQueryParams,
 )
+from openbb_core.provider.utils.descriptions import QUERY_DESCRIPTIONS
 from openbb_core.provider.utils.helpers import ClientResponse, amake_requests
 from openbb_intrinio.utils.helpers import get_data_one
 from pydantic import Field, field_validator, model_validator
-
-_warn = warnings.warn
 
 
 class IntrinioBalanceSheetQueryParams(BalanceSheetQueryParams):
@@ -23,18 +23,20 @@ class IntrinioBalanceSheetQueryParams(BalanceSheetQueryParams):
     Source: https://docs.intrinio.com/documentation/web_api/get_fundamental_standardized_financials_v2
     """
 
-    period: Literal["annual", "quarter"] = Field(default="annual")
+    __json_schema_extra__ = {
+        "period": {
+            "choices": ["annual", "quarter"],
+        }
+    }
+
+    period: Literal["annual", "quarter"] = Field(
+        default="annual",
+        description=QUERY_DESCRIPTIONS.get("period", ""),
+    )
     fiscal_year: Optional[int] = Field(
         default=None,
         description="The specific fiscal year.  Reports do not go beyond 2008.",
     )
-
-    @field_validator("period", mode="after", check_fields=False)
-    @classmethod
-    def validate_period(cls, v):
-        """Validate period."""
-        v = "FY" if v == "annual" else "QTR"
-        return v
 
     @field_validator("symbol", mode="after", check_fields=False)
     @classmethod
@@ -429,23 +431,22 @@ class IntrinioBalanceSheetFetcher(
         """Return the raw data from the Intrinio endpoint."""
         api_key = credentials.get("intrinio_api_key") if credentials else ""
         statement_code = "balance_sheet_statement"
-
         fundamentals_data: Dict = {}
         base_url = "https://api-v2.intrinio.com"
+        period = "FY" if query.period == "annual" else "QTR"
         fundamentals_url = (
             f"{base_url}/companies/{query.symbol}/fundamentals?"
-            f"statement_code={statement_code}&type={query.period}"
+            f"statement_code={statement_code}&type={period}"
         )
         if query.fiscal_year is not None:
             if query.fiscal_year < 2008:
-                _warn("Financials data is only available from 2008 and later.")
+                warn("Financials data is only available from 2008 and later.")
                 query.fiscal_year = 2008
             fundamentals_url = fundamentals_url + f"&fiscal_year={query.fiscal_year}"
         fundamentals_url = fundamentals_url + f"&api_key={api_key}"
         fundamentals_data = (await get_data_one(fundamentals_url, **kwargs)).get(
             "fundamentals", []
         )
-
         fiscal_periods = [
             f"{item['fiscal_year']}-{item['fiscal_period']}"
             for item in fundamentals_data
@@ -454,20 +455,20 @@ class IntrinioBalanceSheetFetcher(
 
         async def callback(response: ClientResponse, _: Any) -> Dict:
             """Return the response."""
-            statement_data = await response.json()
+            statement_data = await response.json()  # type: ignore
             return {
-                "period_ending": statement_data["fundamental"]["end_date"],
-                "fiscal_year": statement_data["fundamental"]["fiscal_year"],
-                "fiscal_period": statement_data["fundamental"]["fiscal_period"],
-                "financials": statement_data["standardized_financials"],
+                "period_ending": statement_data["fundamental"]["end_date"],  # type: ignore
+                "fiscal_year": statement_data["fundamental"]["fiscal_year"],  # type: ignore
+                "fiscal_period": statement_data["fundamental"]["fiscal_period"],  # type: ignore
+                "financials": statement_data["standardized_financials"],  # type: ignore
             }
 
         urls = [
-            f"{base_url}/fundamentals/{query.symbol}-{statement_code}-{period}/standardized_financials?api_key={api_key}"
-            for period in fiscal_periods
+            f"{base_url}/fundamentals/{query.symbol}-{statement_code}-{p}/standardized_financials?api_key={api_key}"
+            for p in fiscal_periods
         ]
 
-        return await amake_requests(urls, callback, **kwargs)
+        return await amake_requests(urls, callback, **kwargs)  # type: ignore
 
     @staticmethod
     def transform_data(
@@ -475,6 +476,7 @@ class IntrinioBalanceSheetFetcher(
     ) -> List[IntrinioBalanceSheetData]:
         """Return the transformed data."""
         transformed_data: List[IntrinioBalanceSheetData] = []
+        period = "FY" if query.period == "annual" else "QTR"
         units = []
         for item in data:
             sub_dict: Dict[str, Any] = {}
@@ -482,7 +484,7 @@ class IntrinioBalanceSheetFetcher(
             for sub_item in item["financials"]:
                 field_name = sub_item["data_tag"]["tag"]
                 unit = sub_item["data_tag"].get("unit", "")
-                if unit and "share" not in unit:
+                if unit and len(unit) == 3:
                     units.append(unit)
                 sub_dict[field_name] = (
                     float(sub_item["value"])
@@ -496,7 +498,7 @@ class IntrinioBalanceSheetFetcher(
             sub_dict["reported_currency"] = list(set(units))[0]
 
             # Intrinio does not return Q4 data but FY data instead
-            if query.period == "QTR" and item["fiscal_period"] == "FY":
+            if period == "QTR" and item["fiscal_period"] == "FY":
                 sub_dict["fiscal_period"] = "Q4"
 
             transformed_data.append(IntrinioBalanceSheetData(**sub_dict))

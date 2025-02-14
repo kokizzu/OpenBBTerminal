@@ -2,8 +2,8 @@
 
 # pylint: disable=unused-argument
 from typing import Any, Dict, List, Optional
+from warnings import warn
 
-from finvizfinance.screener import performance
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.recent_performance import (
     RecentPerformanceData,
@@ -20,7 +20,7 @@ class FinvizPricePerformanceQueryParams(RecentPerformanceQueryParams):
     Source: https://finviz.com/screener.ashx
     """
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class FinvizPricePerformanceData(RecentPerformanceData):
@@ -47,12 +47,12 @@ class FinvizPricePerformanceData(RecentPerformanceData):
     volatility_week: Optional[float] = Field(
         default=None,
         description="One-week realized volatility, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "fontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     volatility_month: Optional[float] = Field(
         default=None,
         description="One-month realized volatility, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "fontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     price: Optional[float] = Field(
         default=None,
@@ -97,7 +97,12 @@ class FinvizPricePerformanceFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Extract the raw data from Finviz."""
+        # pylint: disable=import-outside-toplevel
+        from finvizfinance import util
+        from finvizfinance.screener import performance
+        from openbb_core.provider.utils.helpers import get_requests_session
 
+        util.session = get_requests_session()
         screen = performance.Performance()
         screen.set_filter(ticker=query.symbol)
         try:
@@ -108,7 +113,18 @@ class FinvizPricePerformanceFetcher(
             screen_df = screen_df.fillna("N/A").replace("N/A", None)  # type: ignore
         except Exception as e:
             raise e from e
-        return screen_df.to_dict(orient="records")
+
+        symbols = query.symbol.split(",")
+
+        # Check for missing symbols and warn of the missing symbols.
+        for symbol in symbols:
+            if symbol not in screen_df["Ticker"].tolist():
+                warn(f"Symbol Error: {symbol} was not found.")
+
+        return sorted(
+            screen_df.to_dict(orient="records"),
+            key=(lambda item: (symbols.index(item.get("Ticker", len(symbols))))),
+        )
 
     @staticmethod
     def transform_data(

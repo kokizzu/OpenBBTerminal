@@ -1,8 +1,7 @@
-"""TMX Equity Profile fetcher"""
+"""TMX Equity Profile fetcher."""
 
 # pylint: disable=unused-argument
-import asyncio
-import json
+
 from typing import Any, Dict, List, Optional
 
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -10,15 +9,13 @@ from openbb_core.provider.standard_models.equity_info import (
     EquityInfoData,
     EquityInfoQueryParams,
 )
-from openbb_tmx.utils import gql
-from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent
 from pydantic import Field, model_validator
 
 
 class TmxEquityProfileQueryParams(EquityInfoQueryParams):
     """TMX Equity Profile query params."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class TmxEquityProfileData(EquityInfoData):
@@ -33,25 +30,28 @@ class TmxEquityProfileData(EquityInfoData):
         "stock_exchange": "exchangeCode",
         "industry_category": "industry",
         "industry_group": "qmdescription",
+        "issue_type": "issueType",
+        "share_outstanding": "shareOutStanding",
+        "shares_escrow": "sharesESCROW",
+        "total_shares_outstanding": "totalSharesOutStanding",
     }
+
     email: Optional[str] = Field(description="The email of the company.", default=None)
     issue_type: Optional[str] = Field(
-        description="The issuance type of the asset.", default=None, alias="issueType"
+        description="The issuance type of the asset.",
+        default=None,
     )
     shares_outstanding: Optional[int] = Field(
         description="The number of listed shares outstanding.",
         default=None,
-        alias="shareOutStanding",
     )
     shares_escrow: Optional[int] = Field(
         description="The number of shares held in escrow.",
         default=None,
-        alias="sharesESCROW",
     )
     shares_total: Optional[int] = Field(
         description="The total number of shares outstanding from all classes.",
         default=None,
-        alias="totalSharesOutStanding",
     )
     dividend_frequency: Optional[str] = Field(
         description="The dividend frequency.", default=None
@@ -70,7 +70,7 @@ class TmxEquityProfileFetcher(
         List[TmxEquityProfileData],
     ]
 ):
-    """Transform the query, extract and transform the data from the TMX endpoints."""
+    """TMX Equity Profile Fetcher."""
 
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> TmxEquityProfileQueryParams:
@@ -84,18 +84,22 @@ class TmxEquityProfileFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the TMX endpoint."""
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        import json  # noqa
+        from openbb_tmx.utils import gql  # noqa
+        from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent  # noqa
 
         symbols = query.symbol.split(",")
 
         # The list where the results will be stored and appended to.
-        results = []
+        results: List[Dict] = []
         user_agent = get_random_agent()
 
         url = "https://app-money.tmx.com/graphql"
 
         async def create_task(symbol: str, results) -> None:
-            """Makes a POST request to the TMX GraphQL endpoint for a single symbol."""
-
+            """Make a POST request to the TMX GraphQL endpoint for a single symbol."""
             symbol = (
                 symbol.upper().replace("-", ".").replace(".TO", "").replace(".TSX", "")
             )
@@ -133,7 +137,6 @@ class TmxEquityProfileFetcher(
         **kwargs: Any,
     ) -> List[TmxEquityProfileData]:
         """Return the transformed data."""
-
         # Get only the items associated with `equity.profile()`.
         items_list = [
             "shortDescription",

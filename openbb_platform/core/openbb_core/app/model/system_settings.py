@@ -5,8 +5,6 @@ import platform as pl  # I do this so that the import doesn't conflict with the 
 from pathlib import Path
 from typing import List, Literal, Optional
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
-
 from openbb_core.app.constants import (
     HOME_DIRECTORY,
     OPENBB_DIRECTORY,
@@ -14,8 +12,10 @@ from openbb_core.app.constants import (
     USER_SETTINGS_PATH,
 )
 from openbb_core.app.model.abstract.tagged import Tagged
-from openbb_core.app.model.fast_api_settings import FastAPISettings
-from openbb_core.app.version import VERSION
+from openbb_core.app.model.api_settings import APISettings
+from openbb_core.app.model.python_settings import PythonSettings
+from openbb_core.app.version import CORE_VERSION, VERSION
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 
 class SystemSettings(Tagged):
@@ -28,6 +28,7 @@ class SystemSettings(Tagged):
 
     # OpenBB section
     version: str = VERSION
+    core: str = CORE_VERSION
     home_directory: str = str(HOME_DIRECTORY)
     openbb_directory: str = str(OPENBB_DIRECTORY)
     user_settings_path: str = str(USER_SETTINGS_PATH)
@@ -40,12 +41,15 @@ class SystemSettings(Tagged):
     logging_handlers: List[str] = Field(default_factory=lambda: ["file"])
     logging_rolling_clock: bool = False
     logging_verbosity: int = 20
-    logging_sub_app: Literal["python", "api", "pro"] = "python"
+    logging_sub_app: Literal["python", "api", "pro", "cli"] = "python"
     logging_suppress: bool = False
     log_collect: bool = True
 
     # API section
-    api_settings: FastAPISettings = Field(default_factory=FastAPISettings)
+    api_settings: APISettings = Field(default_factory=APISettings)
+
+    # Python section
+    python_settings: PythonSettings = Field(default_factory=PythonSettings)
 
     # Others
     debug_mode: bool = False
@@ -61,9 +65,9 @@ class SystemSettings(Tagged):
         )
 
     @staticmethod
-    def create_empty_json(path: Path) -> None:
+    def create_json(path: Path, template: Optional[dict] = None) -> None:
         """Create an empty JSON file."""
-        path.write_text(json.dumps({}), encoding="utf-8")
+        path.write_text(json.dumps(obj=template or {}, indent=4), encoding="utf-8")
 
     # TODO: Figure out why this works only opposite to what the docs say
     # https://docs.pydantic.dev/latest/concepts/validators/#model-validators
@@ -77,9 +81,14 @@ class SystemSettings(Tagged):
         system_settings = Path(values.system_settings_path).resolve()
         obb_dir.mkdir(parents=True, exist_ok=True)
 
-        for path in [user_settings, system_settings]:
-            if not path.exists():
-                cls.create_empty_json(path)
+        if not user_settings.exists():
+            cls.create_json(
+                user_settings,
+                {"credentials": {}, "preferences": {}, "defaults": {"commands": {}}},
+            )
+
+        if not system_settings.exists():
+            cls.create_json(system_settings, {})
 
         return values
 

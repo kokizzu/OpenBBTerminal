@@ -6,6 +6,7 @@ from urllib.parse import quote, urlencode
 
 
 def check_args(query_args: Dict, to_include: List[str]):
+    """Check if all fields in to_include are present in query_args."""
     available_args = ["country", "start_date", "end_date", "importance", "group"]
 
     # Check if all fields in to_include are present in query_args
@@ -15,10 +16,12 @@ def check_args(query_args: Dict, to_include: List[str]):
     )
 
 
+# pylint: disable = R0912
 def generate_url(in_query):
-    """
-    Generate the url for trading economimcs.  There is not a single api endpoint to hit so these are
-    generated based on the combinations.  There are also some combinations that return no data so that will return ""
+    """Generate the url for trading economimcs.
+
+    There is not a single api endpoint to hit so these are generated based on the combinations.
+    There are also some combinations that return no data so that will return an empty string.
     """
     # Converting the input query to a dict of params that are not None
     query = {k: v for k, v in in_query.dict().items() if v is not None}
@@ -45,6 +48,7 @@ def generate_url(in_query):
     # Construct URL based on query parameters
     # Country Only
     if check_args(query, ["country"]):
+        # pylint: disable=possibly-used-before-assignment
         url = f"{base_url}/country/{country}?c="
     # Country + Date
     elif check_args(query, ["country", "start_date", "end_date"]):
@@ -56,10 +60,14 @@ def generate_url(in_query):
         url = f"{base_url}/country/{country}?{urlencode(query)}&c="
     # Country + Group
     elif check_args(query, ["country", "group"]):
+        # pylint: disable=possibly-used-before-assignment
         url = f"{base_url}/country/{country}/group/{group}?c="
     # Country + Group + Date
     elif check_args(query, ["country", "group", "start_date", "end_date"]):
         url = f'{base_url}/country/{country}/group/{group}/{query["start_date"]}/{query["end_date"]}?c='
+    # Country + Date + Importance
+    elif check_args(query, ["country", "importance", "start_date", "end_date"]):
+        url = f'{base_url}/country/{country}/{query["start_date"]}/{query["end_date"]}?{urlencode(query)}&c='
     # By date only
     elif check_args(query, ["start_date", "end_date"]):
         url = f'{base_url}/country/All/{query["start_date"]}/{query["end_date"]}?c='
@@ -82,5 +90,8 @@ def generate_url(in_query):
         start_date = query["start_date"]
         end_date = query["end_date"]
         url = f"{base_url}/country/{country}/group/{group}/{start_date}/{end_date}?{urlencode(query)}&c="
+    # Calendar IDs
+    elif check_args(query, ["calendar_id"]):
+        url = f'{base_url}/calendarid/{str(query["calendar_id"])}?c='
 
     return url if url else ""

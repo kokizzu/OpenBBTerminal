@@ -1,12 +1,7 @@
 """LBMA Fixing Standard Model."""
 
-from datetime import (
-    date as dateType,
-    datetime,
-)
+from datetime import date as dateType
 from typing import Literal, Optional
-
-from pydantic import Field, field_validator
 
 from openbb_core.provider.abstract.data import Data
 from openbb_core.provider.abstract.query_params import QueryParams
@@ -14,6 +9,7 @@ from openbb_core.provider.utils.descriptions import (
     DATA_DESCRIPTIONS,
     QUERY_DESCRIPTIONS,
 )
+from pydantic import Field
 
 
 class LbmaFixingQueryParams(QueryParams):
@@ -77,11 +73,3 @@ class LbmaFixingData(Data):
         default=None,
         description="Daily fixing price in EUR.",
     )
-
-    @field_validator("date", mode="before", check_fields=False)
-    @classmethod
-    def validate_date(cls, v) -> dateType:
-        """Validate date."""
-        if isinstance(v, datetime):
-            return v.date()
-        return datetime.strptime(v, "%Y-%m-%d").date()

@@ -1,9 +1,7 @@
 """YFinance ETF Info Model."""
 
 # pylint: disable=unused-argument
-import asyncio
-import warnings
-from datetime import datetime
+
 from typing import Any, Dict, List, Optional
 
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -12,15 +10,12 @@ from openbb_core.provider.standard_models.etf_info import (
     EtfInfoQueryParams,
 )
 from pydantic import Field, field_validator
-from yfinance import Ticker
-
-_warn = warnings.warn
 
 
 class YFinanceEtfInfoQueryParams(EtfInfoQueryParams):
     """YFinance ETF Info Query."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class YFinanceEtfInfoData(EtfInfoData):
@@ -30,17 +25,39 @@ class YFinanceEtfInfoData(EtfInfoData):
         "name": "longName",
         "inception_date": "fundInceptionDate",
         "description": "longBusinessSummary",
+        "fund_type": "legalType",
+        "fund_family": "fundFamily",
+        "exchange_timezone": "timeZoneFullName",
+        "nav_price": "navPrice",
+        "total_assets": "totalAssets",
+        "trailing_pe": "trailingPE",
+        "dividend_yield": "yield",
+        "dividend_rate_ttm": "trailingAnnualDividendRate",
+        "dividend_yield_ttm": "trailingAnnualDividendYield",
+        "year_high": "fiftyTwoWeekHigh",
+        "year_low": "fiftyTwoWeekLow",
+        "ma_50d": "fiftyDayAverage",
+        "ma_200d": "twoHundredDayAverage",
+        "return_ytd": "ytdReturn",
+        "return_3y_avg": "threeYearAverageReturn",
+        "return_5y_avg": "fiveYearAverageReturn",
+        "beta_3y_avg": "beta3Year",
+        "volume_avg": "averageVolume",
+        "volume_avg_10d": "averageDailyVolume10Day",
+        "bid_size": "bidSize",
+        "ask_size": "askSize",
+        "high": "dayHigh",
+        "low": "dayLow",
+        "prev_close": "previousClose",
     }
 
     fund_type: Optional[str] = Field(
         default=None,
         description="The legal type of fund.",
-        alias="legalType",
     )
     fund_family: Optional[str] = Field(
         default=None,
         description="The fund family.",
-        alias="fundFamily",
     )
     category: Optional[str] = Field(
         default=None,
@@ -53,7 +70,6 @@ class YFinanceEtfInfoData(EtfInfoData):
     exchange_timezone: Optional[str] = Field(
         default=None,
         description="The timezone of the exchange.",
-        alias="timeZoneFullName",
     )
     currency: Optional[str] = Field(
         default=None,
@@ -62,87 +78,71 @@ class YFinanceEtfInfoData(EtfInfoData):
     nav_price: Optional[float] = Field(
         default=None,
         description="The net asset value per unit of the fund.",
-        alias="navPrice",
     )
     total_assets: Optional[int] = Field(
         default=None,
         description="The total value of assets held by the fund.",
-        alias="totalAssets",
     )
     trailing_pe: Optional[float] = Field(
         default=None,
         description="The trailing twelve month P/E ratio of the fund's assets.",
-        alias="trailingPE",
     )
     dividend_yield: Optional[float] = Field(
         default=None,
         description="The dividend yield of the fund, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
-        alias="yield",
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     dividend_rate_ttm: Optional[float] = Field(
         default=None,
         description="The trailing twelve month annual dividend rate of the fund, in currency units.",
-        alias="trailingAnnualDividendRate",
     )
     dividend_yield_ttm: Optional[float] = Field(
         default=None,
         description="The trailing twelve month annual dividend yield of the fund, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
-        alias="trailingAnnualDividendYield",
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     year_high: Optional[float] = Field(
         default=None,
         description="The fifty-two week high price.",
-        alias="fiftyTwoWeekHigh",
     )
     year_low: Optional[float] = Field(
         default=None,
         description="The fifty-two week low price.",
-        alias="fiftyTwoWeekLow",
     )
     ma_50d: Optional[float] = Field(
         default=None,
         description="50-day moving average price.",
-        alias="fiftyDayAverage",
     )
     ma_200d: Optional[float] = Field(
         default=None,
         description="200-day moving average price.",
-        alias="twoHundredDayAverage",
     )
     return_ytd: Optional[float] = Field(
         default=None,
         description="The year-to-date return of the fund, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
-        alias="ytdReturn",
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     return_3y_avg: Optional[float] = Field(
         default=None,
         description="The three year average return of the fund, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
-        alias="threeYearAverageReturn",
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     return_5y_avg: Optional[float] = Field(
         default=None,
         description="The five year average return of the fund, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
-        alias="fiveYearAverageReturn",
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     beta_3y_avg: Optional[float] = Field(
         default=None,
         description="The three year average beta of the fund.",
-        alias="beta3Year",
     )
     volume_avg: Optional[float] = Field(
         default=None,
         description="The average daily trading volume of the fund.",
-        alias="averageVolume",
     )
     volume_avg_10d: Optional[float] = Field(
         default=None,
         description="The average daily trading volume of the fund over the past ten days.",
-        alias="averageDailyVolume10Day",
     )
     bid: Optional[float] = Field(
         default=None,
@@ -151,7 +151,6 @@ class YFinanceEtfInfoData(EtfInfoData):
     bid_size: Optional[float] = Field(
         default=None,
         description="The current bid size.",
-        alias="bidSize",
     )
     ask: Optional[float] = Field(
         default=None,
@@ -160,7 +159,6 @@ class YFinanceEtfInfoData(EtfInfoData):
     ask_size: Optional[float] = Field(
         default=None,
         description="The current ask size.",
-        alias="askSize",
     )
     open: Optional[float] = Field(
         default=None,
@@ -169,12 +167,10 @@ class YFinanceEtfInfoData(EtfInfoData):
     high: Optional[float] = Field(
         default=None,
         description="The highest price of the most recent trading session.",
-        alias="dayHigh",
     )
     low: Optional[float] = Field(
         default=None,
         description="The lowest price of the most recent trading session.",
-        alias="dayLow",
     )
     volume: Optional[int] = Field(
         default=None,
@@ -183,14 +179,17 @@ class YFinanceEtfInfoData(EtfInfoData):
     prev_close: Optional[float] = Field(
         default=None,
         description="The previous closing price.",
-        alias="previousClose",
     )
 
     @field_validator("inception_date", mode="before", check_fields=False)
     @classmethod
     def validate_date(cls, v):
         """Validate first stock price date."""
-        return datetime.utcfromtimestamp(v).date().strftime("%Y-%m-%d") if v else None
+        from datetime import datetime  # pylint: disable=import-outside-toplevel
+
+        if isinstance(v, datetime):
+            return v.date().strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(v).date().strftime("%Y-%m-%d") if v else None
 
 
 class YFinanceEtfInfoFetcher(
@@ -210,8 +209,19 @@ class YFinanceEtfInfoFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Extract the raw data from YFinance."""
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        from openbb_core.app.model.abstract.error import OpenBBError
+        from openbb_core.provider.utils.errors import EmptyDataError
+        from openbb_core.provider.utils.helpers import (
+            get_requests_session,
+            safe_fromtimestamp,
+        )
+        from warnings import warn
+        from yfinance import Ticker
+
         symbols = query.symbol.split(",")
-        results = []
+        results: list = []
         fields = [
             "symbol",
             "quoteType",
@@ -249,30 +259,64 @@ class YFinanceEtfInfoFetcher(
             "fiveYearAverageReturn",
             "beta3Year",
             "longBusinessSummary",
+            "firstTradeDateEpochUtc",
         ]
+        messages: list = []
+        session = get_requests_session()
 
         async def get_one(symbol):
             """Get the data for one ticker symbol."""
-            result = {}
-            ticker = {}
+            result: dict = {}
+            ticker: dict = {}
             try:
-                ticker = Ticker(symbol).get_info()
+                ticker = Ticker(
+                    symbol,
+                    session=session,
+                    proxy=session.proxies if session.proxies else None,
+                ).get_info()
             except Exception as e:
-                _warn(f"Error getting data for {symbol}: {e}")
+                messages.append(
+                    f"Error getting data for {symbol} -> {e.__class__.__name__}: {e}"
+                )
             if ticker:
                 quote_type = ticker.pop("quoteType", "")
                 if quote_type == "ETF":
-                    for field in fields:
-                        if field in ticker:
-                            result[field] = ticker.get(field, None)
+                    try:
+                        for field in fields:
+                            if field in ticker and ticker.get(field) is not None:
+                                result[field] = ticker.get(field, None)
+                        if "firstTradeDateEpochUtc" in result:
+                            _first_trade = result.pop("firstTradeDateEpochUtc")
+                            if (
+                                "fundInceptionDate" not in result
+                                and _first_trade is not None
+                            ):
+                                result["fundInceptionDate"] = safe_fromtimestamp(
+                                    _first_trade
+                                )
+                    except Exception as e:
+                        messages.append(
+                            f"Error processing data for {symbol} -> {e.__class__.__name__}: {e}"
+                        )
+                        result = {}
                 if quote_type != "ETF":
-                    _warn(f"{symbol} is not an ETF.")
+                    messages.append(f"{symbol} is not an ETF.")
                 if result:
                     results.append(result)
 
         tasks = [get_one(symbol) for symbol in symbols]
 
         await asyncio.gather(*tasks)
+
+        if not results and not messages:
+            raise EmptyDataError("No data was returned for the given symbol(s).")
+
+        if not results and messages:
+            raise OpenBBError("\n".join(messages))
+
+        if results and messages:
+            for message in messages:
+                warn(message)
 
         return results
 

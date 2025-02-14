@@ -2,17 +2,15 @@
 
 import traceback
 import warnings
-from functools import lru_cache, partial
-from inspect import Parameter, Signature, isclass, iscoroutinefunction, signature
+from functools import lru_cache
+from inspect import isclass
 from typing import (
     Any,
     Callable,
     Dict,
     List,
-    Mapping,
     Optional,
     Type,
-    Union,
     get_args,
     get_origin,
     get_type_hints,
@@ -20,15 +18,10 @@ from typing import (
 )
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, SerializeAsAny, Tag, create_model
-from pydantic.v1.validators import find_validators
-from typing_extensions import Annotated, ParamSpec, _AnnotatedAlias
-
 from openbb_core.app.deprecation import DeprecationSummary, OpenBBDeprecationWarning
-from openbb_core.app.example_generator import ExampleGenerator
 from openbb_core.app.extension_loader import ExtensionLoader
 from openbb_core.app.model.abstract.warning import OpenBBWarning
-from openbb_core.app.model.command_context import CommandContext
+from openbb_core.app.model.example import filter_list
 from openbb_core.app.model.obbject import OBBject
 from openbb_core.app.provider_interface import (
     ExtraParams,
@@ -37,6 +30,8 @@ from openbb_core.app.provider_interface import (
     StandardParams,
 )
 from openbb_core.env import Env
+from pydantic import BaseModel
+from typing_extensions import Annotated, ParamSpec
 
 P = ParamSpec("P")
 
@@ -48,153 +43,6 @@ class OpenBBErrorResponse(BaseModel):
     error_kind: str
 
 
-class CommandValidator:
-    """Validate Command."""
-
-    @staticmethod
-    def is_standard_pydantic_type(value_type: Type) -> bool:
-        """Check whether or not a parameter type is a valid Pydantic Standard Type."""
-        try:
-            func = next(
-                find_validators(value_type, config=dict(arbitrary_types_allowed=True))  # type: ignore
-            )
-            valid_type = func.__name__ != "arbitrary_type_validator"
-        except Exception:
-            valid_type = False
-
-        return valid_type
-
-    @staticmethod
-    def is_valid_pydantic_model_type(model_type: Type) -> bool:
-        """Check whether or not a parameter type is a valid Pydantic Model Type."""
-        if not isclass(model_type):
-            return False
-
-        if issubclass(model_type, BaseModel):
-            try:
-                model_type.model_json_schema()
-                return True
-            except ValueError:
-                return False
-        return False
-
-    @classmethod
-    def is_serializable_value_type(cls, value_type: Type) -> bool:
-        """Check whether or not a parameter type is a valid serializable type."""
-        return cls.is_standard_pydantic_type(
-            value_type=value_type
-        ) or cls.is_valid_pydantic_model_type(model_type=value_type)
-
-    @staticmethod
-    def is_annotated_dc(annotation) -> bool:
-        """Check whether or not a parameter type is an annotated dataclass."""
-        return isinstance(annotation, _AnnotatedAlias) and hasattr(
-            annotation.__args__[0], "__dataclass_fields__"
-        )
-
-    @staticmethod
-    def check_reserved_param(
-        name: str,
-        expected_annot: Any,
-        parameter_map: Mapping[str, Parameter],
-        func: Callable,
-        sig: Signature,
-    ):
-        """Check whether or not a parameter is reserved."""
-        if name in parameter_map:
-            annotation = getattr(parameter_map[name], "annotation", None)
-            if annotation is not None and CommandValidator.is_annotated_dc(annotation):
-                annotation = annotation.__args__[0].__bases__[0]
-            if not annotation == expected_annot:
-                raise TypeError(
-                    f"The parameter `{name}` must be a {expected_annot}.\n"
-                    f"module    = {func.__module__}\n"
-                    f"function  = {func.__name__}\n"
-                    f"signature = {sig}\n"
-                )
-
-    @classmethod
-    def check_parameters(cls, func: Callable):
-        """Check whether or not a parameter is a valid."""
-        sig = signature(func)
-        parameter_map = sig.parameters
-
-        check_reserved = partial(
-            cls.check_reserved_param, parameter_map=parameter_map, func=func, sig=sig
-        )
-        check_reserved("cc", CommandContext)
-        check_reserved("provider_choices", ProviderChoices)
-        check_reserved("standard_params", StandardParams)
-        check_reserved("extra_params", ExtraParams)
-
-        for parameter in parameter_map.values():
-            if not cls.is_serializable_value_type(value_type=parameter.annotation):
-                raise TypeError(
-                    "Invalid parameter type, please provide a serializable type like:"
-                    "BaseModel, Pydantic Standard Type or CommandContext.\n"
-                    f"module    = {func.__module__}\n"
-                    f"function  = {func.__name__}\n"
-                    f"signature = {sig}\n"
-                    f"parameter = {parameter}\n"
-                )
-
-    @classmethod
-    def check_return(cls, func: Callable):
-        """Check whether or not a return type is a valid."""
-        sig = signature(func)
-        return_type = sig.return_annotation
-
-        valid_return_type = False
-
-        if isclass(return_type) and issubclass(return_type, OBBject):
-            results_type = return_type.__pydantic_generic_metadata__.get("args", [])[
-                0
-            ]  # type: ignore
-            if not isinstance(results_type, type(None)):
-                generic_type_list = get_args(results_type)
-                if len(generic_type_list) >= 1:
-                    valid_return_type = cls.is_serializable_value_type(
-                        value_type=generic_type_list[len(generic_type_list) - 1]
-                    )
-                else:
-                    valid_return_type = cls.is_serializable_value_type(
-                        value_type=results_type
-                    )
-
-        if not valid_return_type:
-            raise TypeError(
-                "\nInvalid function: "
-                f"    {func.__module__}.{func.__name__}\n"
-                "Invalid return type in signature:"
-                f"    {func.__name__}(...) -> {sig.return_annotation}:\n"
-                "Allowed return type:"
-                f"    {func.__name__}(...) -> OBBject[T] :\n"
-                "If you need T = None, use an empty model instead.\n"
-            )
-
-    @classmethod
-    def check(cls, func: Callable, model: str = ""):
-        """Check whether or not a function is valid."""
-        if model and not iscoroutinefunction(func):
-            raise TypeError(
-                f"Invalid function: {func.__module__}.{func.__name__}\n"
-                "Model is specified but function is not async.\n"
-                "\n\n"
-                '\033[92m@router.command(model="WorldNews")\n'
-                "async def world(\n"
-                "    cc: CommandContext,\n"
-                "    provider_choices: ProviderChoices,\n"
-                "    standard_params: StandardParams,\n"
-                "    extra_params: ExtraParams,\n"
-                ") -> OBBject:\n"
-                '    """World News. Global news data."""\n'
-                "    return await OBBject.from_query(Query(**locals()))\033[0m"
-            )
-
-        cls.check_return(func=func)
-        cls.check_parameters(func=func)
-
-
 class Router:
     """OpenBB Router Class."""
 
@@ -203,15 +51,33 @@ class Router:
         """API Router."""
         return self._api_router
 
+    @property
+    def prefix(self) -> str:
+        """Prefix."""
+        return self._api_router.prefix
+
+    @property
+    def description(self) -> Optional[str]:
+        """Description."""
+        return self._description
+
+    @property
+    def routers(self) -> Dict[str, "Router"]:
+        """Routers nested within the Router, i.e. sub-routers."""
+        return self._routers
+
     def __init__(
         self,
         prefix: str = "",
+        description: Optional[str] = None,
     ) -> None:
         """Initialize Router."""
         self._api_router = APIRouter(
             prefix=prefix,
             responses={404: {"description": "Not found"}},
         )
+        self._description = description
+        self._routers: Dict[str, Router] = {}
 
     @overload
     def command(self, func: Optional[Callable[P, OBBject]]) -> Callable[P, OBBject]:
@@ -233,32 +99,32 @@ class Router:
         api_router = self._api_router
 
         model = kwargs.pop("model", "")
-        examples = kwargs.pop("examples", [])
-        exclude_auto_examples = kwargs.pop("exclude_auto_examples", False)
-
+        no_validate = kwargs.pop("no_validate", None)
+        if no_validate is True:
+            func.__annotations__["return"] = None
         if func := SignatureInspector.complete(func, model):
-            if not exclude_auto_examples:
-                examples.insert(
-                    0,
-                    ExampleGenerator.generate(
-                        route=SignatureInspector.get_operation_id(func, sep="."),
-                        model=model,
-                    ),
-                )
 
             kwargs["response_model_exclude_unset"] = True
             kwargs["openapi_extra"] = kwargs.get("openapi_extra", {})
             kwargs["openapi_extra"]["model"] = model
-            kwargs["openapi_extra"]["examples"] = examples
+            kwargs["openapi_extra"]["examples"] = filter_list(
+                examples=kwargs.pop("examples", []),
+                providers=ProviderInterface().available_providers,
+            )
+            kwargs["openapi_extra"]["no_validate"] = no_validate
             kwargs["operation_id"] = kwargs.get(
                 "operation_id", SignatureInspector.get_operation_id(func)
             )
             kwargs["path"] = kwargs.get("path", f"/{func.__name__}")
             kwargs["endpoint"] = func
             kwargs["methods"] = kwargs.get("methods", ["GET"])
-            kwargs["response_model"] = kwargs.get(
-                "response_model",
-                func.__annotations__["return"],  # type: ignore
+            kwargs["response_model"] = (
+                kwargs.get(
+                    "response_model",
+                    func.__annotations__["return"],  # type: ignore
+                )
+                if not no_validate
+                else func.__annotations__["return"]
             )
             kwargs["response_model_by_alias"] = kwargs.get(
                 "response_model_by_alias", False
@@ -267,6 +133,9 @@ class Router:
             kwargs["responses"] = kwargs.get(
                 "responses",
                 {
+                    204: {
+                        "description": "Empty response",
+                    },
                     400: {
                         "model": OpenBBErrorResponse,
                         "description": "No Results Found",
@@ -275,6 +144,10 @@ class Router:
                     500: {
                         "model": OpenBBErrorResponse,
                         "description": "Internal Error",
+                    },
+                    502: {
+                        "model": OpenBBErrorResponse,
+                        "description": "Unauthorized",
                     },
                 },
             )
@@ -297,10 +170,41 @@ class Router:
         prefix: str = "",
     ):
         """Include router."""
-        tags = [prefix[1:]] if prefix else None
+        tags = [prefix.strip("/")] if prefix else None
         self._api_router.include_router(
             router=router.api_router, prefix=prefix, tags=tags  # type: ignore
         )
+        name = prefix if prefix else router.prefix
+        self._routers[name.strip("/")] = router
+
+    def get_attr(self, path: str, attr: str) -> Any:
+        """Get router attribute from path.
+
+        Parameters
+        ----------
+        path : str
+            Path to the router or nested router.
+            E.g. "/equity" or "/equity/price".
+        attr : str
+            Attribute to get.
+
+        Returns
+        -------
+        Any
+            Attribute value.
+        """
+        return self._search_attr(self, path, attr)
+
+    @staticmethod
+    def _search_attr(router: "Router", path: str, attr: str) -> Any:
+        """Recursively search router attribute from path."""
+        path = path.strip("/")
+        first = path.split("/")[0]
+        if first in router.routers:
+            return Router._search_attr(
+                router.routers[first], "/".join(path.split("/")[1:]), attr
+            )
+        return getattr(router, attr, None)
 
 
 class SignatureInspector:
@@ -355,10 +259,9 @@ class SignatureInspector:
                 callable_=provider_interface.params[model]["extra"],
             )
 
-            func = cls.inject_return_type(
+            func = cls.inject_return_annotation(
                 func=func,
-                return_map=provider_interface.return_map.get(model),
-                model=model,
+                annotation=provider_interface.return_annotations[model],
             )
 
         else:
@@ -376,82 +279,25 @@ class SignatureInspector:
         return func
 
     @staticmethod
-    def inject_return_type(
-        func: Callable[P, OBBject],
-        return_map: Dict[str, dict],
-        model: str,
-    ) -> Callable[P, OBBject]:
-        """
-        Inject full return model into the function.
-        Also updates __name__ and __doc__ for API schemas.
-        """
-
-        results: Dict[str, Any] = {"list_type": [], "dict_type": []}
-
-        for provider, return_data in return_map.items():
-            if return_data["is_list"]:
-                results["list_type"].append(
-                    Annotated[return_data["model"], Tag(provider)]
-                )
-                continue
-
-            results["dict_type"].append(Annotated[return_data["model"], Tag(provider)])
-
-        list_models, union_models = results.values()
-
-        return_types = []
-        for t, v in results.items():
-            if not v:
-                continue
-
-            inner_type = SerializeAsAny[
-                Annotated[
-                    Union[tuple(v)],  # type: ignore
-                    Field(discriminator="provider"),
-                ]
-            ]
-            return_types.append(List[inner_type] if t == "list_type" else inner_type)
-
-        return_type = create_model(
-            f"OBBject_{model}",
-            __base__=OBBject,
-            __doc__=f"OBBject with results of type {model}",
-            results=(
-                Optional[Union[tuple(return_types)]],  # type: ignore
-                Field(
-                    None,
-                    description="Serializable results.",
-                    json_schema_extra={
-                        "model": model,
-                        "has_list": bool(len(list_models) > 0),
-                        "is_union": bool(list_models and union_models),
-                    },
-                ),
-            ),
-        )
-
-        func.__annotations__["return"] = return_type
-        return func
-
-    @staticmethod
     def polish_return_schema(func: Callable[P, OBBject]) -> Callable[P, OBBject]:
         """Polish API schemas by filling `__doc__` and `__name__`."""
         return_type = func.__annotations__["return"]
         is_list = False
 
-        results_type = get_type_hints(return_type)["results"]
-        results_type_args = get_args(results_type)
-        if not isinstance(results_type, type(None)):
-            results_type = results_type_args[0]
+        if return_type == OBBject:
+            results_type = get_type_hints(return_type)["results"]
+            results_type_args = get_args(results_type)
+            if not isinstance(results_type, type(None)):
+                results_type = results_type_args[0]
 
-        is_list = get_origin(results_type) == list
-        inner_type = (
-            results_type_args[0] if is_list and results_type_args else results_type
-        )
-        inner_type_name = getattr(inner_type, "__name__", inner_type)
+            is_list = isinstance(get_origin(results_type), list)
+            inner_type = (
+                results_type_args[0] if is_list and results_type_args else results_type
+            )
+            inner_type_name = getattr(inner_type, "__name__", inner_type)
 
-        func.__annotations__["return"].__doc__ = "OBBject"
-        func.__annotations__["return"].__name__ = f"OBBject[{inner_type_name}]"
+            func.__annotations__["return"].__doc__ = "OBBject"
+            func.__annotations__["return"].__name__ = f"OBBject[{inner_type_name}]"
 
         return func
 
@@ -480,13 +326,21 @@ class SignatureInspector:
         return func
 
     @staticmethod
+    def inject_return_annotation(
+        func: Callable[P, OBBject], annotation: Type[OBBject]
+    ) -> Callable[P, OBBject]:
+        """Annotate function with return annotation."""
+        func.__annotations__["return"] = annotation
+        return func
+
+    @staticmethod
     def get_description(func: Callable) -> str:
         """Get description from docstring."""
         doc = func.__doc__
         if doc:
             description = doc.split("    Parameters\n    ----------")[0]
             description = description.split("    Returns\n    -------")[0]
-            description = description.split("    Example\n    -------")[0]
+            description = description.split("    Examples\n    -------")[0]
             description = "\n".join([line.strip() for line in description.split("\n")])
 
             return description
@@ -654,7 +508,7 @@ class RouterLoader:
         """Load routes from extensions."""
         router = Router()
 
-        for name, entry in ExtensionLoader().core_objects.items():
+        for name, entry in ExtensionLoader().core_objects.items():  # type: ignore[attr-defined]
             try:
                 router.include_router(router=entry, prefix=f"/{name}")
             except Exception as e:

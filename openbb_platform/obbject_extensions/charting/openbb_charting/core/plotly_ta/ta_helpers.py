@@ -1,17 +1,19 @@
-import re
-from typing import Optional
+"""Helper functions for technical analysis indicators."""
 
-import pandas as pd
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from pandas import DataFrame
 
 
 def check_columns(
-    data: pd.DataFrame, high: bool = True, low: bool = True, close: bool = True
+    data: "DataFrame", high: bool = True, low: bool = True, close: bool = True
 ) -> Optional[str]:
-    """Returns the close columns, or None if the dataframe does not have required columns
+    """Return the close columns, or None if the dataframe does not have required columns.
 
     Parameters
     ----------
-    data: pd.DataFrame
+    data: DataFrame
         The dataframe to check
     high: bool
         Whether to check for high column
@@ -24,8 +26,10 @@ def check_columns(
     -------
     Optional[str]
         The name of the close column, none if df is invalid
-
     """
+    # pylint: disable=import-outside-toplevel
+    import re
+
     close_regex = r"(Adj\sClose|adj_close|Close)"
     # pylint: disable=too-many-boolean-expressions
     if (
