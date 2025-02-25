@@ -1,3 +1,5 @@
+"""Countries list for Trading Economics API."""
+
 country_dict = {
     "G20": [
         "United States",
@@ -16,6 +18,7 @@ country_dict = {
         "Spain",
     ],
     "Australia": [
+        "Australia",
         "Fiji",
         "Kiribati",
         "New Caledonia",

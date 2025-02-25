@@ -51,10 +51,15 @@ def build_new_signature(path: str, func: Callable) -> Signature:
     parameter_list = sig.parameters.values()
     return_annotation = sig.return_annotation
     new_parameter_list = []
-
-    for parameter in parameter_list:
+    var_kw_pos = len(parameter_list)
+    for pos, parameter in enumerate(parameter_list):
         if parameter.name == "cc" and parameter.annotation == CommandContext:
             continue
+
+        if parameter.kind == Parameter.VAR_KEYWORD:
+            # We track VAR_KEYWORD parameter to insert the any additional
+            # parameters we need to add before it and avoid a SyntaxError
+            var_kw_pos = pos
 
         new_parameter_list.append(
             Parameter(
@@ -66,18 +71,21 @@ def build_new_signature(path: str, func: Callable) -> Signature:
         )
 
     if CHARTING_INSTALLED and path.replace("/", "_")[1:] in Charting.functions():
-        new_parameter_list.append(
+        new_parameter_list.insert(
+            var_kw_pos,
             Parameter(
                 "chart",
                 kind=Parameter.POSITIONAL_OR_KEYWORD,
                 default=False,
                 annotation=bool,
-            )
+            ),
         )
+        var_kw_pos += 1
 
     if custom_headers := SystemService().system_settings.api_settings.custom_headers:
         for name, default in custom_headers.items():
-            new_parameter_list.append(
+            new_parameter_list.insert(
+                var_kw_pos,
                 Parameter(
                     name.replace("-", "_"),
                     kind=Parameter.POSITIONAL_OR_KEYWORD,
@@ -85,11 +93,13 @@ def build_new_signature(path: str, func: Callable) -> Signature:
                     annotation=Annotated[
                         Optional[str], Header(include_in_schema=False)
                     ],
-                )
+                ),
             )
+            var_kw_pos += 1
 
     if Env().API_AUTH:
-        new_parameter_list.append(
+        new_parameter_list.insert(
+            var_kw_pos,
             Parameter(
                 "__authenticated_user_settings",
                 kind=Parameter.POSITIONAL_OR_KEYWORD,
@@ -97,8 +107,9 @@ def build_new_signature(path: str, func: Callable) -> Signature:
                 annotation=Annotated[
                     UserSettings, Depends(AuthService().user_settings_hook)
                 ],
-            )
+            ),
         )
+        var_kw_pos += 1
 
     return Signature(
         parameters=new_parameter_list,
@@ -121,8 +132,8 @@ def validate_output(c_out: OBBject) -> OBBject:
 
     Returns
     -------
-    OBBject
-        Validated OBBject object.
+    Dict
+        Serialized OBBject.
     """
 
     def is_model(type_):
@@ -134,20 +145,31 @@ def validate_output(c_out: OBBject) -> OBBject:
         json_schema_extra = field.json_schema_extra if field else None
 
         # case where 1st layer field needs to be excluded
-        if json_schema_extra and json_schema_extra.get("exclude_from_api", None):
+        if (
+            json_schema_extra
+            and isinstance(json_schema_extra, dict)
+            and json_schema_extra.get("exclude_from_api", None)
+        ):
             delattr(c_out, key)
 
         # if it's a model with nested fields
         elif is_model(type_):
-            for field_name, field in type_.__fields__.items():
-                if field.json_schema_extra and field.json_schema_extra.get(
-                    "exclude_from_api", None
+            for field_name, field in type_.model_fields.items():
+                extra = getattr(field, "json_schema_extra", None)
+                if (
+                    extra
+                    and isinstance(extra, dict)
+                    and extra.get("exclude_from_api", None)
                 ):
                     delattr(value, field_name)
 
                 # if it's a yet a nested model we need to go deeper in the recursion
-                elif is_model(field.annotation):
+                elif is_model(getattr(field, "annotation", None)):
                     exclude_fields_from_api(field_name, getattr(value, field_name))
+
+    # Let a non-OBBject object pass through without validation
+    if not isinstance(c_out, OBBject):
+        return c_out
 
     for k, v in c_out.model_copy():
         exclude_fields_from_api(k, v)
@@ -163,24 +185,71 @@ def build_api_wrapper(
     func: Callable = route.endpoint  # type: ignore
     path: str = route.path  # type: ignore
 
+    no_validate = route.openapi_extra.get("no_validate")
     new_signature = build_new_signature(path=path, func=func)
     new_annotations_map = build_new_annotation_map(sig=new_signature)
-
     func.__signature__ = new_signature  # type: ignore
     func.__annotations__ = new_annotations_map
 
+    if no_validate is True:
+        route.response_model = None
+
     @wraps(wrapped=func)
-    async def wrapper(*args: Tuple[Any], **kwargs: Dict[str, Any]):
+    async def wrapper(*args: Tuple[Any], **kwargs: Dict[str, Any]) -> OBBject:
         user_settings: UserSettings = UserSettings.model_validate(
             kwargs.pop(
                 "__authenticated_user_settings",
-                UserService.read_default_user_settings(),
+                UserService.read_from_file(),
             )
         )
-        execute = partial(command_runner.run, path, user_settings)
-        output: OBBject = await execute(*args, **kwargs)
+        p = path.strip("/").replace("/", ".")
+        defaults = (
+            getattr(user_settings.defaults, "__dict__", {})
+            .get("commands", {})
+            .get(p, {})
+        )
 
-        output = validate_output(output)
+        if defaults:
+            provider_choices = getattr(kwargs.get("provider_choices"), "__dict__", {})
+            _provider = defaults.pop("provider", None)
+
+            if (
+                _provider
+                and isinstance(_provider, list)
+                and _provider[0] == provider_choices.get("provider")
+            ):
+                standard_params = getattr(
+                    kwargs.pop("standard_params", None), "__dict__", {}
+                )
+                extra_params = getattr(kwargs.pop("extra_params", None), "__dict__", {})
+
+                if "chart" in defaults:
+                    kwargs["chart"] = defaults.pop("chart", False)
+
+                if "chart_params" in defaults:
+                    extra_params["chart_params"] = defaults.pop("chart_params", {})
+
+                for k, v in defaults.items():
+                    if k in standard_params and standard_params[k] is None:
+                        standard_params[k] = v
+                    elif (k in standard_params and standard_params[k] is not None) or (
+                        k in extra_params and extra_params[k] is not None
+                    ):
+                        continue
+                    elif k not in extra_params or (
+                        k in extra_params and extra_params[k] is None
+                    ):
+                        extra_params[k] = v
+
+                kwargs["standard_params"] = standard_params
+                kwargs["extra_params"] = extra_params
+
+        execute = partial(command_runner.run, path, user_settings)
+        output = await execute(*args, **kwargs)
+
+        if isinstance(output, OBBject) and not no_validate:
+            return validate_output(output)
+
         return output
 
     return wrapper

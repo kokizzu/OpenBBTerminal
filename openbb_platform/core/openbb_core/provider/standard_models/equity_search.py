@@ -2,11 +2,10 @@
 
 from typing import Optional
 
-from pydantic import Field
-
 from openbb_core.provider.abstract.data import Data
 from openbb_core.provider.abstract.query_params import QueryParams
 from openbb_core.provider.utils.descriptions import DATA_DESCRIPTIONS
+from pydantic import Field
 
 
 class EquitySearchQueryParams(QueryParams):
@@ -16,10 +15,6 @@ class EquitySearchQueryParams(QueryParams):
     is_symbol: bool = Field(
         description="Whether to search by ticker symbol.", default=False
     )
-    use_cache: Optional[bool] = Field(
-        default=True,
-        description="Whether to use the cache or not.",
-    )
 
 
 class EquitySearchData(Data):
@@ -28,4 +23,4 @@ class EquitySearchData(Data):
     symbol: Optional[str] = Field(
         default=None, description=DATA_DESCRIPTIONS.get("symbol", "")
     )
-    name: str = Field(description="Name of the company.")
+    name: Optional[str] = Field(default=None, description="Name of the company.")

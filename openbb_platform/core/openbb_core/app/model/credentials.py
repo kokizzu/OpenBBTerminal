@@ -1,9 +1,16 @@
 """Credentials model and its utilities."""
 
+import json
 import traceback
 import warnings
-from typing import Dict, Optional, Set, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
+from openbb_core.app.constants import USER_SETTINGS_PATH
+from openbb_core.app.extension_loader import ExtensionLoader
+from openbb_core.app.model.abstract.warning import OpenBBWarning
+from openbb_core.app.provider_interface import ProviderInterface
+from openbb_core.env import Env
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -13,11 +20,6 @@ from pydantic import (
 )
 from pydantic.functional_serializers import PlainSerializer
 from typing_extensions import Annotated
-
-from openbb_core.app.extension_loader import ExtensionLoader
-from openbb_core.app.model.abstract.warning import OpenBBWarning
-from openbb_core.app.provider_interface import ProviderInterface
-from openbb_core.env import Env
 
 
 class LoadingError(Exception):
@@ -36,37 +38,48 @@ OBBSecretStr = Annotated[
 class CredentialsLoader:
     """Here we create the Credentials model."""
 
-    credentials: Dict[str, Set[str]] = {}
+    credentials: Dict[str, List[str]] = {}
 
-    @staticmethod
-    def prepare(
-        credentials: Dict[str, Set[str]],
-    ) -> Dict[str, Tuple[object, None]]:
+    def format_credentials(self, additional: dict) -> Dict[str, Tuple[object, None]]:
         """Prepare credentials map to be used in the Credentials model."""
         formatted: Dict[str, Tuple[object, None]] = {}
-        for origin, creds in credentials.items():
-            for c in creds:
-                # Not sure we should do this, if you require the same credential it breaks
-                # if c in formatted:
-                #     raise ValueError(f"Credential '{c}' already in use.")
-                formatted[c] = (
+        for c_origin, c_list in self.credentials.items():
+            for c_name in c_list:
+                if c_name in formatted:
+                    warnings.warn(
+                        message=f"Skipping '{c_name}', credential already in use.",
+                        category=OpenBBWarning,
+                    )
+                    continue
+                formatted[c_name] = (
                     Optional[OBBSecretStr],
-                    Field(
-                        default=None, description=origin
-                    ),  # register the credential origin (obbject, providers)
+                    Field(default=None, description=c_origin, alias=c_name.upper()),
                 )
 
-        return formatted
+        if additional:
+            for key, value in additional.items():
+                if key in formatted:
+                    continue
+                formatted[key] = (
+                    Optional[OBBSecretStr],
+                    Field(default=value, description=key, alias=key.upper()),
+                )
+
+        return dict(sorted(formatted.items()))
 
     def from_obbject(self) -> None:
         """Load credentials from OBBject extensions."""
-        self.credentials["obbject"] = set()
-        for name, entry in ExtensionLoader().obbject_objects.items():
+        for ext_name, ext in ExtensionLoader().obbject_objects.items():  # type: ignore[attr-defined]
             try:
-                for c in entry.credentials:
-                    self.credentials["obbject"].add(c)
+                if ext_name in self.credentials:
+                    warnings.warn(
+                        message=f"Skipping '{ext_name}', name already in user.",
+                        category=OpenBBWarning,
+                    )
+                    continue
+                self.credentials[ext_name] = ext.credentials
             except Exception as e:
-                msg = f"Error loading extension: {name}\n"
+                msg = f"Error loading extension: {ext_name}\n"
                 if Env().DEBUG_MODE:
                     traceback.print_exception(type(e), e, e.__traceback__)
                     raise LoadingError(msg + f"\033[91m{e}\033[0m") from e
@@ -77,20 +90,29 @@ class CredentialsLoader:
 
     def from_providers(self) -> None:
         """Load credentials from providers."""
-        self.credentials["providers"] = set()
-        for c in ProviderInterface().credentials:
-            self.credentials["providers"].add(c)
+        self.credentials = ProviderInterface().credentials
 
     def load(self) -> BaseModel:
         """Load credentials from providers."""
         # We load providers first to give them priority choosing credential names
         self.from_providers()
         self.from_obbject()
-        return create_model(  # type: ignore
+        path = Path(USER_SETTINGS_PATH)
+        additional: dict = {}
+
+        if path.exists():
+            with open(USER_SETTINGS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+                if "credentials" in data:
+                    additional = data["credentials"]
+
+        model = create_model(
             "Credentials",
-            __config__=ConfigDict(validate_assignment=True),
-            **self.prepare(self.credentials),
+            __config__=ConfigDict(validate_assignment=True, populate_by_name=True),
+            **self.format_credentials(additional),  # type: ignore
         )
+        model.origins = self.credentials
+        return model
 
 
 _Credentials = CredentialsLoader().load()
@@ -99,8 +121,10 @@ _Credentials = CredentialsLoader().load()
 class Credentials(_Credentials):  # type: ignore
     """Credentials model used to store provider credentials."""
 
+    model_config = ConfigDict(extra="allow")
+
     def __repr__(self) -> str:
-        """String representation of the credentials."""
+        """Define the string representation of the credentials."""
         return (
             self.__class__.__name__
             + "\n\n"
@@ -116,3 +140,7 @@ class Credentials(_Credentials):  # type: ignore
                 [f"{k}: {v}" for k, v in sorted(self.model_dump(mode="json").items())]
             )
         )
+
+    def update(self, incoming: "Credentials"):
+        """Update current credentials."""
+        self.__dict__.update(incoming.model_dump(exclude_none=True))

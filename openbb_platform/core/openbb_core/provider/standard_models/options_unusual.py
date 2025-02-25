@@ -2,14 +2,13 @@
 
 from typing import Optional
 
-from pydantic import Field, field_validator
-
 from openbb_core.provider.abstract.data import Data
 from openbb_core.provider.abstract.query_params import QueryParams
 from openbb_core.provider.utils.descriptions import (
     DATA_DESCRIPTIONS,
     QUERY_DESCRIPTIONS,
 )
+from pydantic import Field, field_validator
 
 
 class OptionsUnusualQueryParams(QueryParams):
@@ -21,8 +20,9 @@ class OptionsUnusualQueryParams(QueryParams):
     )
 
     @field_validator("symbol", mode="before", check_fields=False)
-    def upper_symbol(cls, v: str):
-        """Convert symbol to uppercase."""
+    @classmethod
+    def to_upper(cls, v: str):
+        """Convert field to uppercase."""
         return v.upper() if v else None
 
 

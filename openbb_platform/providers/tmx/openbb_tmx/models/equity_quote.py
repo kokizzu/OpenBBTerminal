@@ -1,34 +1,27 @@
-"""TMX Equity Profile fetcher"""
+"""TMX Equity Profile fetcher."""
 
 # pylint: disable=unused-argument
 
-import asyncio
-import json
-import warnings
 from datetime import (
     date as dateType,
     datetime,
 )
 from typing import Any, Dict, List, Optional, Union
+from warnings import warn
 
-from numpy import nan
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.equity_quote import (
     EquityQuoteData,
     EquityQuoteQueryParams,
 )
 from openbb_core.provider.utils.descriptions import DATA_DESCRIPTIONS
-from openbb_tmx.utils import gql
-from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent
 from pydantic import Field, field_validator
-
-_warn = warnings.warn
 
 
 class TmxEquityQuoteQueryParams(EquityQuoteQueryParams):
     """TMX Equity Profile query params."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class TmxEquityQuoteData(EquityQuoteData):
@@ -47,7 +40,35 @@ class TmxEquityQuoteData(EquityQuoteData):
         "industry_group": "qmdescription",
         "exchange": "exchangeCode",
         "security_type": "datatype",
+        "year_high": "weeks52high",
+        "year_low": "weeks52low",
+        "ma_21": "day21MovingAvg",
+        "ma_50": "day50MovingAvg",
+        "ma_200": "day200MovingAvg",
+        "volume_avg_10d": "averageVolume10D",
+        "volume_avg_30d": "averageVolume30D",
+        "volume_avg_50d": "averageVolume50D",
+        "market_cap": "marketCap",
+        "market_cap_all_classes": "MarketCapAllClasses",
+        "div_amount": "dividendAmount",
+        "div_currency": "dividendCurrency",
+        "div_yield": "dividendYield",
+        "div_freq": "dividendFrequency",
+        "div_ex_date": "exDividendDate",
+        "div_pay_date": "dividendPayDate",
+        "div_growth_3y": "dividend3Years",
+        "div_growth_5y": "dividend5Years",
+        "pe": "peRatio",
+        "debt_to_equity": "totalDebtToEquity",
+        "price_to_book": "priceToBook",
+        "price_to_cf": "priceToCashFlow",
+        "return_on_equity": "returnOnEquity",
+        "return_on_assets": "returnOnAssets",
+        "shares_outstanding": "shareOutStanding",
+        "shares_escrow": "sharesESCROW",
+        "shares_total": "totalSharesOutStanding",
     }
+
     name: Optional[str] = Field(default=None, description="The name of the asset.")
     security_type: Optional[str] = Field(
         description="The issuance type of the asset.", default=None
@@ -99,113 +120,111 @@ class TmxEquityQuoteData(EquityQuoteData):
     change_percent: Optional[float] = Field(
         default=None,
         description="The change in price as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     year_high: Optional[float] = Field(
-        description="Fifty-two week high.", default=None, alias="weeks52high"
+        description="Fifty-two week high.",
+        default=None,
     )
     year_low: Optional[float] = Field(
-        description="Fifty-two week low.", default=None, alias="weeks52low"
+        description="Fifty-two week low.",
+        default=None,
     )
     ma_21: Optional[float] = Field(
         description="Twenty-one day moving average.",
         default=None,
-        alias="day21MovingAvg",
     )
     ma_50: Optional[float] = Field(
-        description="Fifty day moving average.", default=None, alias="day50MovingAvg"
+        description="Fifty day moving average.",
+        default=None,
     )
     ma_200: Optional[float] = Field(
         description="Two-hundred day moving average.",
         default=None,
-        alias="day200MovingAvg",
     )
     volume_avg_10d: Optional[int] = Field(
-        description="Ten day average volume.", default=None, alias="averageVolume10D"
+        description="Ten day average volume.",
+        default=None,
     )
     volume_avg_30d: Optional[int] = Field(
-        description="Thirty day average volume.", default=None, alias="averageVolume30D"
+        description="Thirty day average volume.",
+        default=None,
     )
     volume_avg_50d: Optional[int] = Field(
-        description="Fifty day average volume.", default=None, alias="averageVolume50D"
+        description="Fifty day average volume.",
+        default=None,
     )
     market_cap: Optional[int] = Field(
-        description="Market capitalization.", default=None, alias="MarketCap"
+        description="Market capitalization.",
+        default=None,
     )
     market_cap_all_classes: Optional[int] = Field(
         description="Market capitalization of all share classes.",
         default=None,
-        alias="MarketCapAllClasses",
     )
     div_amount: Optional[float] = Field(
         description="The most recent dividend amount.",
         default=None,
-        alias="dividendAmount",
     )
     div_currency: Optional[str] = Field(
         description="The currency the dividend is paid in.",
         default=None,
-        alias="dividendCurrency",
     )
     div_yield: Optional[float] = Field(
         description="The dividend yield as a normalized percentage.",
         default=None,
-        alias="dividendYield",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     div_freq: Optional[str] = Field(
         description="The frequency of dividend payments.",
         default=None,
-        alias="dividendFrequency",
     )
     div_ex_date: Optional[dateType] = Field(
-        description="The ex-dividend date.", default=None, alias="exDividendDate"
+        description="The ex-dividend date.",
+        default=None,
     )
     div_pay_date: Optional[dateType] = Field(
         description="The next dividend ayment date.",
         default=None,
-        alias="dividendPayDate",
     )
     div_growth_3y: Optional[Union[float, str]] = Field(
         description="The three year dividend growth as a normalized percentage.",
         default=None,
-        alias="dividend3Years",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     div_growth_5y: Optional[Union[float, str]] = Field(
         description="The five year dividend growth as a normalized percentage.",
         default=None,
-        alias="dividend5Years",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     pe: Optional[Union[float, str]] = Field(
-        description="The price to earnings ratio.", default=None, alias="peRatio"
+        description="The price to earnings ratio.",
+        default=None,
     )
     eps: Optional[Union[float, str]] = Field(
         description="The earnings per share.", default=None
     )
     debt_to_equity: Optional[Union[float, str]] = Field(
-        description="The debt to equity ratio.", default=None, alias="totalDebtToEquity"
+        description="The debt to equity ratio.",
+        default=None,
     )
     price_to_book: Optional[Union[float, str]] = Field(
-        description="The price to book ratio.", default=None, alias="priceToBook"
+        description="The price to book ratio.",
+        default=None,
     )
     price_to_cf: Optional[Union[float, str]] = Field(
         description="The price to cash flow ratio.",
         default=None,
-        alias="priceToCashFlow",
     )
     return_on_equity: Optional[Union[float, str]] = Field(
         description="The return on equity, as a normalized percentage.",
         default=None,
-        alias="returnOnEquity",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     return_on_assets: Optional[Union[float, str]] = Field(
         description="The return on assets, as a normalized percentage.",
         default=None,
-        alias="returnOnAssets",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     beta: Optional[Union[float, str]] = Field(
         description="The beta relative to the TSX Composite.", default=None
@@ -216,17 +235,14 @@ class TmxEquityQuoteData(EquityQuoteData):
     shares_outstanding: Optional[int] = Field(
         description="The number of listed shares outstanding.",
         default=None,
-        alias="shareOutStanding",
     )
     shares_escrow: Optional[int] = Field(
         description="The number of shares held in escrow.",
         default=None,
-        alias="sharesESCROW",
     )
     shares_total: Optional[int] = Field(
         description="The total number of shares outstanding from all classes.",
         default=None,
-        alias="totalSharesOutStanding",
     )
 
     @field_validator(
@@ -237,7 +253,7 @@ class TmxEquityQuoteData(EquityQuoteData):
     )
     @classmethod
     def date_validate(cls, v):  # pylint: disable=E0213
-        """Return the datetime object from the date string"""
+        """Return the datetime object from the date string."""
         if v:
             try:
                 return datetime.strptime(v, "%Y-%m-%d").date()
@@ -267,7 +283,7 @@ class TmxEquityQuoteFetcher(
         List[TmxEquityQuoteData],
     ]
 ):
-    """Transform the query, extract and transform the data from the TMX endpoints."""
+    """TMX Equity Quote Fetcher."""
 
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> TmxEquityQuoteQueryParams:
@@ -281,18 +297,22 @@ class TmxEquityQuoteFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the TMX endpoint."""
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        import json  # noqa
+        from openbb_tmx.utils import gql  # noqa
+        from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent  # noqa
 
         symbols = query.symbol.split(",")
 
         # The list where the results will be stored and appended to.
-        results = []
+        results: List[Dict] = []
         user_agent = get_random_agent()
 
         url = "https://app-money.tmx.com/graphql"
 
         async def create_task(symbol: str, results) -> None:
-            """Makes a POST request to the TMX GraphQL endpoint for a single symbol."""
-
+            """Make a POST request to the TMX GraphQL endpoint for a single symbol."""
             symbol = (
                 symbol.upper().replace("-", ".").replace(".TO", "").replace(".TSX", "")
             )
@@ -319,7 +339,7 @@ class TmxEquityQuoteFetcher(
                 data = r["data"]["getQuoteBySymbol"]
                 results.append(data)
             else:
-                _warn(f"Could not get data for {symbol}.")
+                warn(f"Could not get data for {symbol}.")
 
         tasks = [create_task(symbol, results) for symbol in symbols]
         await asyncio.gather(*tasks)
@@ -332,6 +352,8 @@ class TmxEquityQuoteFetcher(
         **kwargs: Any,
     ) -> List[TmxEquityQuoteData]:
         """Return the transformed data."""
+        # pylint: disable=import-outside-toplevel
+        from numpy import nan
 
         # Remove the items associated with `equity.profile()`.
         items_list = [

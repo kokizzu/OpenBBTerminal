@@ -1,19 +1,20 @@
 """Intrinio Cash Flow Statement Model."""
 
 # pylint: disable=unused-argument
-import warnings
-from typing import Any, Dict, List, Literal, Optional
 
+from typing import Any, Dict, List, Literal, Optional
+from warnings import warn
+
+from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.cash_flow import (
     CashFlowStatementData,
     CashFlowStatementQueryParams,
 )
+from openbb_core.provider.utils.descriptions import QUERY_DESCRIPTIONS
 from openbb_core.provider.utils.helpers import ClientResponse, amake_requests
 from openbb_intrinio.utils.helpers import get_data_one
 from pydantic import Field, field_validator, model_validator
-
-_warn = warnings.warn
 
 
 class IntrinioCashFlowStatementQueryParams(CashFlowStatementQueryParams):
@@ -23,7 +24,16 @@ class IntrinioCashFlowStatementQueryParams(CashFlowStatementQueryParams):
     Source: https://docs.intrinio.com/documentation/web_api/get_fundamental_standardized_financials_v2
     """
 
-    period: Literal["annual", "quarter", "ttm", "ytd"] = Field(default="annual")
+    __json_schema_extra__ = {
+        "period": {
+            "choices": ["annual", "quarter", "ttm", "ytd"],
+        }
+    }
+
+    period: Literal["annual", "quarter", "ttm", "ytd"] = Field(
+        default="annual",
+        description=QUERY_DESCRIPTIONS.get("period", ""),
+    )
     fiscal_year: Optional[int] = Field(
         default=None,
         description="The specific fiscal year.  Reports do not go beyond 2008.",
@@ -89,6 +99,12 @@ class IntrinioCashFlowStatementData(CashFlowStatementData):
         description="The currency in which the balance sheet is reported.",
         default=None,
     )
+    net_income_continuing_operations: Optional[float] = Field(
+        default=None, description="Net Income (Continuing Operations)"
+    )
+    net_income_discontinued_operations: Optional[float] = Field(
+        default=None, description="Net Income (Discontinued Operations)"
+    )
     net_income: Optional[float] = Field(
         default=None, description="Consolidated Net Income."
     )
@@ -118,12 +134,6 @@ class IntrinioCashFlowStatementData(CashFlowStatementData):
     )
     net_cash_from_discontinued_operating_activities: Optional[float] = Field(
         default=None, description="Net Cash from Discontinued Operating Activities"
-    )
-    net_income_continuing_operations: Optional[float] = Field(
-        default=None, description="Net Income (Continuing Operations)"
-    )
-    net_income_discontinued_operations: Optional[float] = Field(
-        default=None, description="Net Income (Discontinued Operations)"
     )
     net_cash_from_operating_activities: Optional[float] = Field(
         default=None, description="Net Cash from Operating Activities"
@@ -220,7 +230,7 @@ class IntrinioCashFlowStatementData(CashFlowStatementData):
 
     @model_validator(mode="before")
     @classmethod
-    def replace_zero(cls, values):  # pylint: disable=no-self-argument
+    def replace_zero(cls, values):
         """Check for zero values and replace with None."""
         return (
             {k: None if v == 0 else v for k, v in values.items()}
@@ -249,13 +259,14 @@ class IntrinioCashFlowStatementFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the Intrinio endpoint."""
-
         api_key = credentials.get("intrinio_api_key") if credentials else ""
         statement_code = "cash_flow_statement"
         if query.period in ["quarter", "annual"]:
             period_type = "FY" if query.period == "annual" else "QTR"
-        if query.period in ["ttm", "ytd"]:
+        elif query.period in ["ttm", "ytd"]:
             period_type = query.period.upper()
+        else:
+            raise OpenBBError(f"Period '{query.period}' not supported.")
 
         base_url = "https://api-v2.intrinio.com"
         fundamentals_url = (
@@ -264,7 +275,7 @@ class IntrinioCashFlowStatementFetcher(
         )
         if query.fiscal_year is not None:
             if query.fiscal_year < 2008:
-                _warn("Financials data is only available from 2008 and later.")
+                warn("Financials data is only available from 2008 and later.")
                 query.fiscal_year = 2008
             fundamentals_url = fundamentals_url + f"&fiscal_year={query.fiscal_year}"
         fundamentals_url = fundamentals_url + f"&api_key={api_key}"
@@ -282,10 +293,10 @@ class IntrinioCashFlowStatementFetcher(
             """Return the response."""
             statement_data = await response.json()
             return {
-                "period_ending": statement_data["fundamental"]["end_date"],
-                "fiscal_period": statement_data["fundamental"]["fiscal_period"],
-                "fiscal_year": statement_data["fundamental"]["fiscal_year"],
-                "financials": statement_data["standardized_financials"],
+                "period_ending": statement_data["fundamental"]["end_date"],  # type: ignore
+                "fiscal_period": statement_data["fundamental"]["fiscal_period"],  # type: ignore
+                "fiscal_year": statement_data["fundamental"]["fiscal_year"],  # type: ignore
+                "financials": statement_data["standardized_financials"],  # type: ignore
             }
 
         intrinio_id = f"{query.symbol}-{statement_code}"
@@ -308,7 +319,7 @@ class IntrinioCashFlowStatementFetcher(
 
             for sub_item in item["financials"]:
                 unit = sub_item["data_tag"].get("unit", "")
-                if unit and "share" not in unit:
+                if unit and len(unit) == 3:
                     units.append(unit)
                 field_name = sub_item["data_tag"]["tag"]
                 sub_dict[field_name] = (

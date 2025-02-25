@@ -25,6 +25,7 @@ def obb(pytestconfig):  # pylint: disable=inconsistent-return-statements
 )
 @pytest.mark.integration
 def test_crypto_search(params, obb):
+    """Test the crypto search endpoint."""
     params = {p: v for p, v in params.items() if v}
 
     result = obb.crypto.search(**params)
@@ -38,29 +39,20 @@ def test_crypto_search(params, obb):
     [
         (
             {
-                "symbol": "BTCUSD",
-                "start_date": "2023-01-01",
-                "end_date": "2023-06-06",
-            }
-        ),
-        (
-            {
-                "interval": "1min",
+                "interval": "1d",
                 "provider": "fmp",
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
                 "end_date": "2023-01-02",
-                "timeseries": 1,
             }
         ),
         (
             {
-                "interval": "15min",
+                "interval": "1h",
                 "provider": "fmp",
-                "symbol": "BTCUSD",
-                "start_date": "2023-01-01",
-                "end_date": "2023-01-03",
-                "timeseries": 1,
+                "symbol": "BTCUSD,ETHUSD",
+                "start_date": None,
+                "end_date": None,
             }
         ),
         (
@@ -88,7 +80,6 @@ def test_crypto_search(params, obb):
         (
             {
                 "interval": "1d",
-                "period": "max",
                 "provider": "yfinance",
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
@@ -98,8 +89,8 @@ def test_crypto_search(params, obb):
         (
             {
                 "provider": "tiingo",
-                "interval": "1day",
-                "exchanges": ["POLONIEX", "GDAX"],
+                "interval": "1d",
+                "exchanges": None,
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
@@ -108,7 +99,7 @@ def test_crypto_search(params, obb):
         (
             {
                 "provider": "tiingo",
-                "interval": "1hour",
+                "interval": "1h",
                 "exchanges": ["POLONIEX", "GDAX"],
                 "symbol": "BTCUSD",
                 "start_date": "2023-01-01",
@@ -119,6 +110,7 @@ def test_crypto_search(params, obb):
 )
 @pytest.mark.integration
 def test_crypto_price_historical(params, obb):
+    """Test crypto price historical."""
     result = obb.crypto.price.historical(**params)
     assert result
     assert isinstance(result, OBBject)

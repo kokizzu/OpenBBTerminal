@@ -3,20 +3,19 @@
 from datetime import date as dateType
 from typing import Optional
 
-from pydantic import Field
-
 from openbb_core.provider.abstract.data import Data
 from openbb_core.provider.abstract.query_params import QueryParams
 from openbb_core.provider.utils.descriptions import (
     DATA_DESCRIPTIONS,
     QUERY_DESCRIPTIONS,
 )
+from pydantic import Field
 
 
 class ShortVolumeQueryParams(QueryParams):
     """Short Volume Query."""
 
-    symbol: str = Field(default=None, description=QUERY_DESCRIPTIONS.get("symbol"))
+    symbol: str = Field(description=QUERY_DESCRIPTIONS.get("symbol"))
 
 
 class ShortVolumeData(Data):

@@ -1,18 +1,16 @@
 """Finviz Equity Profile Model."""
 
 # pylint: disable=unused-argument
-import warnings
-from typing import Any, Dict, List, Optional
 
-from finvizfinance.quote import finvizfinance
+from typing import Any, Dict, List, Optional
+from warnings import warn
+
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.equity_info import (
     EquityInfoData,
     EquityInfoQueryParams,
 )
 from pydantic import Field
-
-_warn = warnings.warn
 
 
 class FinvizEquityProfileQueryParams(EquityInfoQueryParams):
@@ -22,7 +20,7 @@ class FinvizEquityProfileQueryParams(EquityInfoQueryParams):
     Source: https://finviz.com/screener.ashx
     """
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class FinvizEquityProfileData(EquityInfoData):
@@ -59,7 +57,7 @@ class FinvizEquityProfileData(EquityInfoData):
     institutional_ownership: Optional[float] = Field(
         default=None,
         description="The institutional ownership of the stock, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     market_cap: Optional[str] = Field(
         default=None,
@@ -68,7 +66,7 @@ class FinvizEquityProfileData(EquityInfoData):
     dividend_yield: Optional[float] = Field(
         default=None,
         description="The dividend yield of the stock, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     earnings_date: Optional[str] = Field(
         default=None,
@@ -98,18 +96,26 @@ class FinvizEquityProfileFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Extract the raw data from Finviz."""
+        # pylint: disable=import-outside-toplevel
+        from finvizfinance import util
+        from finvizfinance.quote import finvizfinance
+        from openbb_core.app.model.abstract.error import OpenBBError
+        from openbb_core.provider.utils.errors import EmptyDataError
+        from openbb_core.provider.utils.helpers import get_requests_session
 
-        results = []
+        util.session = get_requests_session()
+        results: List = []
+        messages: List = []
 
         def get_one(symbol) -> Dict:
             """Get the data for one symbol."""
-            result = {}
+            result: Dict = {}
             try:
                 data = finvizfinance(symbol)
                 fundament = data.ticker_fundament()
                 description = data.ticker_description()
             except Exception as e:  # pylint: disable=W0718
-                _warn(f"Failed to get data for {symbol} -> {e}")
+                messages.append(f"Failed to get data for {symbol} -> {e}")
                 return result
             div_yield = (
                 float(str(fundament.get("Dividend %", None)).replace("%", "")) / 100
@@ -212,6 +218,16 @@ class FinvizEquityProfileFetcher(
             result = get_one(symbol)
             if result is not None and result:
                 results.append(result)
+
+        if not results and messages:
+            raise OpenBBError("\n".join(messages))
+
+        if not results and not messages:
+            raise EmptyDataError("No data was returned for any symbol")
+
+        if results and messages:
+            for message in messages:
+                warn(message)
 
         return results
 

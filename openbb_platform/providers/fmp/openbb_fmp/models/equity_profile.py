@@ -2,10 +2,12 @@
 
 # pylint: disable=unused-argument
 
+import asyncio
 from datetime import (
     date as dateType,
 )
 from typing import Any, Dict, List, Optional
+from warnings import warn
 
 from openbb_core.provider.abstract.data import ForceInt
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -13,7 +15,9 @@ from openbb_core.provider.standard_models.equity_info import (
     EquityInfoData,
     EquityInfoQueryParams,
 )
-from openbb_core.provider.utils.helpers import amake_requests
+from openbb_core.provider.utils.errors import EmptyDataError
+from openbb_core.provider.utils.helpers import amake_request
+from openbb_fmp.utils.helpers import response_callback
 from pydantic import Field, field_validator, model_validator
 
 
@@ -23,7 +27,7 @@ class FMPEquityProfileQueryParams(EquityInfoQueryParams):
     Source: https://site.financialmodelingprep.com/developer/docs/companies-key-stats-free-api/
     """
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
 
 class FMPEquityProfileData(EquityInfoData):
@@ -43,8 +47,12 @@ class FMPEquityProfileData(EquityInfoData):
         "employees": "fullTimeEmployees",
         "long_description": "description",
         "first_stock_price_date": "ipoDate",
+        "market_cap": "mktCap",
+        "last_price": "price",
+        "volume_avg": "volAvg",
+        "annualized_dividend_amount": "lastDiv",
     }
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
     is_etf: bool = Field(description="If the symbol is an ETF.")
     is_actively_trading: bool = Field(description="If the company is actively trading.")
@@ -57,12 +65,10 @@ class FMPEquityProfileData(EquityInfoData):
     market_cap: Optional[ForceInt] = Field(
         default=None,
         description="Market capitalization of the company.",
-        alias="mktCap",
     )
     last_price: Optional[float] = Field(
         default=None,
         description="The last traded price.",
-        alias="price",
     )
     year_high: Optional[float] = Field(
         default=None, description="The one-year high of the price."
@@ -73,12 +79,10 @@ class FMPEquityProfileData(EquityInfoData):
     volume_avg: Optional[ForceInt] = Field(
         default=None,
         description="Average daily trading volume.",
-        alias="volAvg",
     )
     annualized_dividend_amount: Optional[float] = Field(
         default=None,
         description="The annualized dividend payment based on the most recent regular dividend payment.",
-        alias="lastDiv",
     )
     beta: Optional[float] = Field(
         default=None, description="Beta of the stock relative to the market."
@@ -126,9 +130,30 @@ class FMPEquityProfileFetcher(
         api_key = credentials.get("fmp_api_key") if credentials else ""
         symbols = query.symbol.split(",")
         base_url = "https://financialmodelingprep.com/api/v3"
-        urls = [f"{base_url}/profile/{symbol}?apikey={api_key}" for symbol in symbols]
 
-        return await amake_requests(urls, **kwargs)
+        results = []
+
+        async def get_one(symbol):
+            """Get data for one symbol."""
+            url = f"{base_url}/profile/{symbol}?apikey={api_key}"
+            result = await amake_request(
+                url, response_callback=response_callback, **kwargs
+            )
+            if not result:
+                warn(f"Symbol Error: No data found for {symbol}")
+
+            if result:
+                results.append(result[0])
+
+        await asyncio.gather(*[get_one(symbol) for symbol in symbols])
+
+        if not results:
+            raise EmptyDataError("No data found for the given symbols.")
+
+        return sorted(
+            results,
+            key=(lambda item: (symbols.index(item.get("symbol", len(symbols))))),
+        )
 
     @staticmethod
     def transform_data(
@@ -139,7 +164,9 @@ class FMPEquityProfileFetcher(
         """Return the transformed data."""
         results: List[FMPEquityProfileData] = []
         for d in data:
-            d["year_low"], d["year_high"] = d.get("range", "-").split("-")
+            d["year_low"], d["year_high"] = (
+                d.get("range", "-").split("-") if d.get("range") else (None, None)
+            )
 
             # Clear out fields that don't belong and can be had elsewhere.
             entries_to_remove = (

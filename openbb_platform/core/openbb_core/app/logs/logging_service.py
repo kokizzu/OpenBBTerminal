@@ -4,23 +4,28 @@ import json
 import logging
 from enum import Enum
 from types import TracebackType
-from typing import Any, Callable, Dict, Optional, Tuple, Type, Union, cast
+from typing import Any, Callable, Dict, Optional, Tuple, Type, Union
 
 from openbb_core.app.logs.formatters.formatter_with_exceptions import (
     FormatterWithExceptions,
 )
 from openbb_core.app.logs.handlers_manager import HandlersManager
 from openbb_core.app.logs.models.logging_settings import LoggingSettings
-from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.app.model.abstract.singleton import SingletonMeta
 from openbb_core.app.model.system_settings import SystemSettings
 from openbb_core.app.model.user_settings import UserSettings
+from pydantic import BaseModel
 from pydantic_core import to_jsonable_python
 
 
+class DummyProvider(BaseModel):
+    """Dummy Provider for error handling with logs."""
+
+    provider: str = "not_passed_to_kwargs"
+
+
 class LoggingService(metaclass=SingletonMeta):
-    """
-    Logging Manager class responsible for managing logging settings and handling logs.
+    """Logging Service class responsible for managing logging settings and handling logs.
 
     Attributes
     ----------
@@ -54,13 +59,14 @@ class LoggingService(metaclass=SingletonMeta):
         Log startup information.
     """
 
+    _logger = logging.getLogger("openbb.logging_service")
+
     def __init__(
         self,
         system_settings: SystemSettings,
         user_settings: UserSettings,
     ) -> None:
-        """
-        Logging Service Constructor.
+        """Define the Logging Service Constructor.
 
         Sets up the logging settings and handlers and then logs the startup information.
 
@@ -82,8 +88,7 @@ class LoggingService(metaclass=SingletonMeta):
 
     @property
     def logging_settings(self) -> LoggingSettings:
-        """
-        Current logging settings.
+        """Define the Current logging settings.
 
         Returns
         -------
@@ -94,8 +99,7 @@ class LoggingService(metaclass=SingletonMeta):
 
     @logging_settings.setter
     def logging_settings(self, value: Tuple[SystemSettings, UserSettings]):
-        """
-        Setter for updating the logging settings.
+        """Define the Setter for updating the logging settings.
 
         Parameters
         ----------
@@ -109,28 +113,22 @@ class LoggingService(metaclass=SingletonMeta):
         )
 
     def _setup_handlers(self) -> HandlersManager:
-        """
-        Setup Logging Handlers.
+        """Set up Logging Handlers.
 
         Returns
         -------
         HandlersManager
             Handlers Manager object.
         """
-        logger = logging.getLogger(__name__)
-        logging.basicConfig(
-            level=self._logging_settings.verbosity,
-            format=FormatterWithExceptions.LOGFORMAT,
-            datefmt=FormatterWithExceptions.DATEFORMAT,
-            handlers=[],
-            force=True,
+        handlers_manager = HandlersManager(
+            self._logger, settings=self._logging_settings
         )
-        handlers_manager = HandlersManager(settings=self._logging_settings)
+        handlers_manager.setup()
 
-        logger.info("Logging configuration finished")
-        logger.info("Logging set to %s", self._logging_settings.handler_list)
-        logger.info("Verbosity set to %s", self._logging_settings.verbosity)
-        logger.info(
+        self._logger.info("Logging configuration finished")
+        self._logger.info("Logging set to %s", self._logging_settings.handler_list)
+        self._logger.info("Verbosity set to %s", self._logging_settings.verbosity)
+        self._logger.info(
             "LOGFORMAT: %s%s",
             FormatterWithExceptions.LOGPREFIXFORMAT.replace("|", "-"),
             FormatterWithExceptions.LOGFORMAT.replace("|", "-"),
@@ -159,8 +157,7 @@ class LoggingService(metaclass=SingletonMeta):
                 for c in credentials
             }
 
-        logger = logging.getLogger(__name__)
-        logger.info(
+        self._logger.info(
             "STARTUP: %s ",
             json.dumps(
                 {
@@ -178,6 +175,7 @@ class LoggingService(metaclass=SingletonMeta):
             ),
         )
 
+    # pylint: disable=R0917
     def log(
         self,
         user_settings: UserSettings,
@@ -191,8 +189,7 @@ class LoggingService(metaclass=SingletonMeta):
         ],
         custom_headers: Optional[Dict[str, Any]] = None,
     ):
-        """
-        Log command output and relevant information.
+        """Log command output and relevant information.
 
         Parameters
         ----------
@@ -206,7 +203,10 @@ class LoggingService(metaclass=SingletonMeta):
             Callable representing the executed function.
         kwargs : Dict[str, Any]
             Keyword arguments passed to the function.
-        exec_info : Optional[Tuple[Type[BaseException], BaseException, Optional[TracebackType]]], optional
+        exec_info : Union[
+            Tuple[Type[BaseException], BaseException, TracebackType],
+            Tuple[None, None, None],
+        ]
             Exception information, by default None
         """
         self._user_settings = user_settings
@@ -217,38 +217,44 @@ class LoggingService(metaclass=SingletonMeta):
         )
         self._handlers_manager.update_handlers(self._logging_settings)
 
-        if "login" in route:
-            self._log_startup(route, custom_headers)
-        else:
-            logger = logging.getLogger(__name__)
+        if not self._logging_settings.logging_suppress:
 
-            # Remove CommandContext if any
-            kwargs.pop("cc", None)
+            if "login" in route:
+                self._log_startup(route, custom_headers)
+            else:
 
-            # Truncate kwargs if too long
-            kwargs = {k: str(v)[:100] for k, v in kwargs.items()}
+                # Remove CommandContext if any
+                kwargs.pop("cc", None)
 
-            # Get execution info
-            openbb_error = cast(
-                Optional[OpenBBError], exec_info[1] if exec_info else None
-            )
+                # Get provider for posthog logs
+                passed_model = kwargs.get("provider_choices", DummyProvider())
+                provider = (
+                    passed_model.provider
+                    if hasattr(passed_model, "provider")
+                    else "not_passed_to_kwargs"
+                )
 
-            # Construct message
-            message_label = "ERROR" if openbb_error else "CMD"
-            log_message = json.dumps(
-                {
-                    "route": route,
-                    "input": kwargs,
-                    "error": str(openbb_error.original) if openbb_error else None,
-                    "custom_headers": custom_headers,
-                },
-                default=to_jsonable_python,
-            )
-            log_message = f"{message_label}: {log_message}"
+                # Truncate kwargs if too long
+                kwargs = {k: str(v)[:300] for k, v in kwargs.items()}
+                # Get execution info
+                error = None if all(i is None for i in exec_info) else str(exec_info[1])
 
-            log_level = logger.error if openbb_error else logger.info
-            log_level(
-                log_message,
-                extra={"func_name_override": func.__name__},
-                exc_info=exec_info,
-            )
+                # Construct message
+                message_label = "ERROR" if error else "CMD"
+                log_message = json.dumps(
+                    {
+                        "route": route,
+                        "input": kwargs,
+                        "error": error,
+                        "provider": provider,
+                        "custom_headers": custom_headers,
+                    },
+                    default=to_jsonable_python,
+                )
+                log_message = f"{message_label}: {log_message}"
+                log_level = self._logger.error if error else self._logger.info
+                log_level(
+                    log_message,
+                    extra={"func_name_override": func.__name__},
+                    exc_info=exec_info,
+                )

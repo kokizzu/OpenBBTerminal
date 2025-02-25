@@ -1,34 +1,39 @@
 """TMX Stock News model."""
 
 # pylint: disable=unused-argument
-import asyncio
-import json
+
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import pytz
+from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.company_news import (
     CompanyNewsData,
     CompanyNewsQueryParams,
 )
-from openbb_tmx.utils import gql
-from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent
 from pydantic import Field, field_validator
 
 
 class TmxCompanyNewsQueryParams(CompanyNewsQueryParams):
     """TMX Stock News query."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
     page: Optional[int] = Field(
         default=1, description="The page number to start from. Use with limit."
     )
 
+    @field_validator("symbol", mode="before")
+    @classmethod
+    def symbols_validate(cls, v):
+        """Validate the symbols."""
+        if v is None:
+            raise OpenBBError("Symbol is a required field for TMX.")
+        return v
+
 
 class TmxCompanyNewsData(CompanyNewsData):
-    """TMX Stock News Data"""
+    """TMX Stock News Data."""
 
     __alias_dict__ = {
         "date": "datetime",
@@ -39,8 +44,11 @@ class TmxCompanyNewsData(CompanyNewsData):
 
     @field_validator("date", mode="before", check_fields=False)
     @classmethod
-    def date_validate(cls, v):  # pylint: disable=E0213
+    def date_validate(cls, v):
         """Validate the datetime format."""
+        # pylint: disable=import-outside-toplevel
+        import pytz
+
         dt = datetime.strptime(v, "%Y-%m-%dT%H:%M:%S%z")
         return dt.astimezone(pytz.timezone("America/New_York"))
 
@@ -62,13 +70,18 @@ class TmxCompanyNewsFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the TMX endpoint."""
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        import json  # noqa
+        from openbb_tmx.utils import gql  # noqa
+        from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent  # noqa
+
         user_agent = get_random_agent()
-        symbols = query.symbol.split(",")
-        results = []
+        symbols = query.symbol.split(",")  # type: ignore
+        results: List[Dict] = []
 
         async def create_task(symbol, results):
-            """Makes a POST request to the TMX GraphQL endpoint for a single symbol."""
-
+            """Make a POST request to the TMX GraphQL endpoint for a single symbol."""
             symbol = (
                 symbol.upper().replace(".TO", "").replace(".TSX", "").replace("-", ".")
             )
@@ -78,7 +91,7 @@ class TmxCompanyNewsFetcher(
             payload["variables"]["limit"] = query.limit
             payload["variables"]["locale"] = "en"
             url = "https://app-money.tmx.com/graphql"
-            data = {}
+            data: Dict = {}
             response = await get_data_from_gql(
                 method="POST",
                 url=url,

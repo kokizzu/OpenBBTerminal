@@ -1,6 +1,9 @@
 name-template: 'OpenBB Platform v$NEXT_MINOR_VERSION'
 tag-template: 'v$NEXT_MINOR_VERSION'
 categories:
+  - title: 🚨 OpenBB Platform Breaking Changes
+    labels:
+      - 'breaking_change'
   - title: 🦋 OpenBB Platform Enhancements
     labels:
       - 'platform'
@@ -32,7 +35,7 @@ template: |
   ## Thank you and welcome to our new contributors 🔥
   $CONTRIBUTORS
 
-  ## What's new 🎉
+  ## Summary 🎉
 
   ## What's changed 🚀
   $CHANGES

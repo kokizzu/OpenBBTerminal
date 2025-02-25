@@ -1,26 +1,23 @@
-"""TMX Treasury Prices Fetcher"""
+"""TMX Treasury Prices Fetcher."""
 
 # pylint: disable=unused-argument
-from datetime import (
-    date as dateType,
-    datetime,
-    timedelta,
-)
-from typing import Any, Dict, List, Literal, Optional
+
+from datetime import date as dateType
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.treasury_prices import (
     TreasuryPricesData,
     TreasuryPricesQueryParams,
 )
-from openbb_tmx.utils.helpers import get_all_bonds
-from pandas import DataFrame
 from pydantic import Field, field_validator
+
+if TYPE_CHECKING:
+    from pandas import DataFrame
 
 
 class TmxTreasuryPricesQueryParams(TreasuryPricesQueryParams):
-    """
-    TMX Treasury Prices Query Params.
+    """TMX Treasury Prices Query Params.
 
     Data will be made available by 5:00 EST on T+1
 
@@ -98,14 +95,18 @@ class TmxTreasuryPricesFetcher(
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> TmxTreasuryPricesQueryParams:
         """Transform query params."""
+        # pylint: disable=import-outside-toplevel
+        from datetime import timedelta
+
         transformed_params = params.copy()
-        now = datetime.now()
-        if now.date().weekday() > 4:
-            now = now - timedelta(now.date().weekday() - 4)
+        yesterday = dateType.today() - timedelta(days=1)
+        last_bd = (
+            yesterday - timedelta(yesterday.weekday() - 4)
+            if yesterday.weekday() > 4
+            else yesterday
+        )
         if "maturity_date_min" not in transformed_params:
-            transformed_params["maturity_date_min"] = (
-                now - timedelta(days=1)
-            ).strftime("%Y-%m-%d")
+            transformed_params["maturity_date_min"] = last_bd
         return TmxTreasuryPricesQueryParams(**transformed_params)
 
     @staticmethod
@@ -113,15 +114,19 @@ class TmxTreasuryPricesFetcher(
         query: TmxTreasuryPricesQueryParams,
         credentials: Optional[Dict[str, str]],
         **kwargs: Any,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Get the raw data containing all bond data."""
+        # pylint: disable=import-outside-toplevel
+        from openbb_tmx.utils.helpers import get_all_bonds
+
         bonds = await get_all_bonds(use_cache=query.use_cache)
+
         return bonds
 
     @staticmethod
     def transform_data(
         query: TmxTreasuryPricesQueryParams,
-        data: DataFrame,
+        data: "DataFrame",
         **kwargs: Any,
     ) -> List[TmxTreasuryPricesData]:
         """Transform data."""

@@ -1,31 +1,41 @@
 """Test the provider helpers."""
 
 import pytest
-import requests
 from openbb_core.provider.utils.client import ClientSession
 from openbb_core.provider.utils.helpers import (
     amake_request,
     amake_requests,
     get_querystring,
+    get_requests_session,
     make_request,
     to_snake_case,
 )
 
+# pylint: disable=unused-argument
+
 
 class MockResponse:
+    """Mock the response."""
+
     def __init__(self):
+        """Initialize the mock response."""
         self.status_code = 200
         self.status = 200
 
     async def json(self):
+        """Return the json response."""
         return {"test": "test"}
 
 
 class MockSession:
+    """Mock the ClientSession."""
+
     def __init__(self):
+        """Initialize the mock session."""
         self.response = MockResponse()
 
-    async def request(self, *args, **kwargs):
+    async def request(self, *args, **kwargs):  # pylint: disable=unused-argument
+        """Mock the ClientSession.request method."""
         if kwargs.get("raise_for_status", False):
             raise Exception("Test")
 
@@ -72,9 +82,10 @@ def test_make_request(monkeypatch):
         """Mock the requests.get method."""
         return MockResponse()
 
-    monkeypatch.setattr(requests, "get", mock_get)
+    client_session = get_requests_session()
+    monkeypatch.setattr(client_session, "get", mock_get)
 
-    response = make_request("http://mock.url")
+    response = make_request("http://mock.url", session=client_session)
     assert response.status_code == 200
 
     with pytest.raises(ValueError):
@@ -108,7 +119,7 @@ async def test_amake_request(monkeypatch):
         )
 
     with pytest.raises(ValueError):
-        await amake_request("http://mock.url", method="PUT")
+        await amake_request("http://mock.url", method="PUT")  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

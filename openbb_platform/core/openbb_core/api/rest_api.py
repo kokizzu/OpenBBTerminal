@@ -3,14 +3,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from openbb_core.api.app_loader import AppLoader
 from openbb_core.api.router.commands import router as router_commands
 from openbb_core.api.router.coverage import router as router_coverage
 from openbb_core.api.router.system import router as router_system
-from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.app.service.auth_service import AuthService
 from openbb_core.app.service.system_service import SystemService
 from openbb_core.env import Env
@@ -67,51 +65,41 @@ app = FastAPI(
     ],
     lifespan=lifespan,
 )
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=system.api_settings.cors.allow_origins,
     allow_methods=system.api_settings.cors.allow_methods,
     allow_headers=system.api_settings.cors.allow_headers,
 )
-AppLoader.from_routers(
+AppLoader.add_routers(
     app=app,
     routers=(
         [AuthService().router, router_system, router_coverage, router_commands]
         if Env().DEV_MODE
-        else [router_commands]
+        else (
+            [router_commands, router_coverage]
+            if hasattr(router_commands, "routes") and router_commands.routes
+            else [router_commands]
+        )
     ),
     prefix=system.api_settings.prefix,
 )
-
-
-@app.exception_handler(Exception)
-async def api_exception_handler(_: Request, exc: Exception):
-    """Exception handler for all other exceptions."""
-    return JSONResponse(
-        status_code=404,
-        content={
-            "detail": str(exc),
-            "error_kind": exc.__class__.__name__,
-        },
-    )
-
-
-@app.exception_handler(OpenBBError)
-async def openbb_exception_handler(_: Request, exc: OpenBBError):
-    """Exception handler for OpenBB errors."""
-    openbb_error = exc.original
-    status_code = 400 if "No results" in str(openbb_error) else 500
-    return JSONResponse(
-        status_code=status_code,
-        content={
-            "detail": str(openbb_error),
-            "error_kind": openbb_error.__class__.__name__,
-        },
-    )
+AppLoader.add_openapi_tags(app)
+AppLoader.add_exception_handlers(app)
 
 
 if __name__ == "__main__":
+    # pylint: disable=import-outside-toplevel
     import uvicorn
 
-    uvicorn.run("openbb_core.api.rest_api:app", reload=True)
+    # This initializes the OpenBB environment variables so they can be read before uvicorn is run.
+    Env()
+    uvicorn_kwargs = system.python_settings.model_dump().get("uvicorn", {})
+    uvicorn_reload = uvicorn_kwargs.pop("reload", None)
+
+    if uvicorn_reload is None or uvicorn_reload:
+        uvicorn_kwargs["reload"] = True
+
+    uvicorn_app = uvicorn_kwargs.pop("app", "openbb_core.api.rest_api:app")
+
+    uvicorn.run(uvicorn_app, **uvicorn_kwargs)

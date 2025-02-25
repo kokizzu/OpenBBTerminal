@@ -1,7 +1,7 @@
-"""TMX Index Snapshots Model"""
+"""TMX Index Snapshots Model."""
 
 # pylint: disable=unused-argument
-import json
+
 from typing import Any, Dict, List, Literal, Optional
 
 from openbb_core.provider.abstract.fetcher import Fetcher
@@ -10,21 +10,13 @@ from openbb_core.provider.standard_models.index_snapshots import (
     IndexSnapshotsQueryParams,
 )
 from openbb_core.provider.utils.errors import EmptyDataError
-from openbb_tmx.utils import gql
-from openbb_tmx.utils.helpers import (
-    NASDAQ_GIDS,
-    get_data_from_gql,
-    get_data_from_url,
-    get_random_agent,
-    tmx_indices_backend,
-)
 from pydantic import Field, field_validator
 
 
 class TmxIndexSnapshotsQueryParams(IndexSnapshotsQueryParams):
     """TMX Index Snapshots Query Params."""
 
-    region: Literal[None, "ca", "us"] = Field(default="ca")
+    region: Optional[Literal["ca", "us"]] = Field(default="ca")  # type: ignore
     use_cache: bool = Field(
         default=True,
         description="Whether to use a cached request."
@@ -64,17 +56,17 @@ class TmxIndexSnapshotsData(IndexSnapshotsData):
     return_mtd: Optional[float] = Field(
         default=None,
         description="The month-to-date return of the index, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     return_qtd: Optional[float] = Field(
         default=None,
         description="The quarter-to-date return of the index, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     return_ytd: Optional[float] = Field(
         default=None,
         description="The year-to-date return of the index, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     total_market_value: Optional[float] = Field(
         default=None,
@@ -103,7 +95,7 @@ class TmxIndexSnapshotsData(IndexSnapshotsData):
     constituent_largest_weight: Optional[float] = Field(
         default=None,
         description="The largest weight of the index constituents, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     constituent_smallest_market_value: Optional[float] = Field(
         default=None,
@@ -112,7 +104,7 @@ class TmxIndexSnapshotsData(IndexSnapshotsData):
     constituent_smallest_weight: Optional[float] = Field(
         default=None,
         description="The smallest weight of the index constituents, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
 
     @field_validator(
@@ -151,6 +143,8 @@ class TmxIndexSnapshotsFetcher(
         List[TmxIndexSnapshotsData],
     ]
 ):
+    """TMX Index Snapshots Fetcher."""
+
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> TmxIndexSnapshotsQueryParams:
         """Transform the query."""
@@ -163,6 +157,17 @@ class TmxIndexSnapshotsFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the TMX endpoint."""
+        # pylint: disable=import-outside-toplevel
+        import json  # noqa
+        from openbb_tmx.utils import gql  # noqa
+        from openbb_tmx.utils.helpers import (  # noqa
+            NASDAQ_GIDS,
+            get_data_from_gql,
+            get_data_from_url,
+            get_random_agent,
+            get_indices_backend,
+        )
+
         url = "https://tmxinfoservices.com/files/indices/sptsx-indices.json"
         user_agent = get_random_agent()
         results = []
@@ -170,7 +175,7 @@ class TmxIndexSnapshotsFetcher(
             data = await get_data_from_url(
                 url,
                 use_cache=query.use_cache,
-                backend=tmx_indices_backend,
+                backend=get_indices_backend(),
             )
             if not data:
                 raise EmptyDataError

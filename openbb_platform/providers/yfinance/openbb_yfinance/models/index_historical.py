@@ -1,13 +1,11 @@
 """Yahoo Finance Index Historical Model."""
 
-# ruff: noqa: SIM105
 # pylint: disable=unused-argument
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
+from warnings import warn
 
-import pandas as pd
-from dateutil.relativedelta import relativedelta
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.index_historical import (
     IndexHistoricalData,
@@ -15,9 +13,7 @@ from openbb_core.provider.standard_models.index_historical import (
 )
 from openbb_core.provider.utils.descriptions import QUERY_DESCRIPTIONS
 from openbb_core.provider.utils.errors import EmptyDataError
-from openbb_yfinance.utils.helpers import yf_download
-from openbb_yfinance.utils.references import INDICES, INTERVALS, PERIODS
-from pandas import to_datetime
+from openbb_yfinance.utils.references import INDICES, INTERVALS_DICT
 from pydantic import Field
 
 
@@ -27,14 +23,45 @@ class YFinanceIndexHistoricalQueryParams(IndexHistoricalQueryParams):
     Source: https://finance.yahoo.com/world-indices
     """
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {
+        "symbol": {"multiple_items_allowed": True},
+        "interval": {
+            "choices": [
+                "1m",
+                "2m",
+                "5m",
+                "15m",
+                "30m",
+                "60m",
+                "90m",
+                "1h",
+                "1d",
+                "5d",
+                "1W",
+                "1M",
+                "1Q",
+            ]
+        },
+    }
 
-    interval: Optional[INTERVALS] = Field(default="1d", description="Data granularity.")
-    period: Optional[PERIODS] = Field(
-        default="max", description=QUERY_DESCRIPTIONS.get("period", "")
+    interval: Literal[
+        "1m",
+        "2m",
+        "5m",
+        "15m",
+        "30m",
+        "60m",
+        "90m",
+        "1h",
+        "1d",
+        "5d",
+        "1W",
+        "1M",
+        "1Q",
+    ] = Field(
+        default="1d",
+        description=QUERY_DESCRIPTIONS.get("interval", ""),
     )
-    prepost: bool = Field(default=True, description="Include Pre and Post market data.")
-    rounding: bool = Field(default=True, description="Round prices to two decimals?")
 
 
 class YFinanceIndexHistoricalData(IndexHistoricalData):
@@ -52,6 +79,10 @@ class YFinanceIndexHistoricalFetcher(
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> YFinanceIndexHistoricalQueryParams:
         """Transform the query."""
+        # pylint: disable=import-outside-toplevel
+        from dateutil.relativedelta import relativedelta
+        from pandas import DataFrame
+
         transformed_params = params
         now = datetime.now().date()
 
@@ -61,12 +92,12 @@ class YFinanceIndexHistoricalFetcher(
         if params.get("end_date") is None:
             transformed_params["end_date"] = now
 
-        tickers = params.get("symbol").lower().split(",")
+        tickers = params.get("symbol").lower().split(",")  # type: ignore
 
         new_tickers = []
         for ticker in tickers:
             _ticker = ""
-            indices = pd.DataFrame(INDICES).transpose().reset_index()
+            indices = DataFrame(INDICES).transpose().reset_index()
             indices.columns = ["code", "name", "symbol"]
 
             if ticker in indices["code"].values:
@@ -83,6 +114,8 @@ class YFinanceIndexHistoricalFetcher(
 
             if _ticker != "":
                 new_tickers.append(_ticker)
+            else:
+                warn(f"Symbol Error: {ticker} is not a supported index.")
 
         transformed_params["symbol"] = ",".join(new_tickers)
 
@@ -95,39 +128,19 @@ class YFinanceIndexHistoricalFetcher(
         **kwargs: Any,
     ) -> List[dict]:
         """Return the raw data from the Yahoo Finance endpoint."""
+        # pylint: disable=import-outside-toplevel
+        from openbb_yfinance.utils.helpers import yf_download
+
         data = yf_download(
             symbol=query.symbol,
             start_date=query.start_date,
             end_date=query.end_date,
-            interval=query.interval,
-            period=query.period,
-            prepost=query.prepost,
-            rounding=query.rounding,
+            interval=INTERVALS_DICT[query.interval],  # type: ignore
+            prepost=True,
         )
 
         if data.empty:
             raise EmptyDataError()
-
-        days = (
-            1
-            if query.interval in ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "90m"]
-            else 0
-        )
-
-        if query.start_date:
-            if "date" in data.columns:
-                data.set_index("date", inplace=True)
-                data.index = to_datetime(data.index)
-
-            data = data[
-                (data.index >= to_datetime(query.start_date))
-                & (data.index <= to_datetime(query.end_date + timedelta(days=days)))
-            ]
-
-        data.reset_index(inplace=True)
-        data.rename(columns={"index": "date"}, inplace=True)
-        if query.interval in ["1d", "1W", "1M", "3M"]:
-            data["date"] = data["date"].dt.strftime("%Y-%m-%d")
 
         return data.to_dict("records")
 

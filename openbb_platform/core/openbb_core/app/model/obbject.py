@@ -1,6 +1,5 @@
 """The OBBject."""
 
-from re import sub
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -8,6 +7,7 @@ from typing import (
     ClassVar,
     Dict,
     Generic,
+    Hashable,
     List,
     Literal,
     Optional,
@@ -16,19 +16,18 @@ from typing import (
     Union,
 )
 
-import pandas as pd
-from numpy import ndarray
-from pydantic import BaseModel, Field, PrivateAttr
-
 from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.app.model.abstract.tagged import Tagged
 from openbb_core.app.model.abstract.warning import Warning_
 from openbb_core.app.model.charts.chart import Chart
-from openbb_core.app.utils import basemodel_to_df
+from openbb_core.provider.abstract.annotated_result import AnnotatedResult
 from openbb_core.provider.abstract.data import Data
+from pydantic import BaseModel, Field, PrivateAttr
 
 if TYPE_CHECKING:
-    from openbb_core.app.query import Query
+    from numpy import ndarray  # noqa
+    from pandas import DataFrame  # noqa
+    from openbb_core.app.query import Query  # noqa
 
     try:
         from polars import DataFrame as PolarsDataFrame  # type: ignore
@@ -71,6 +70,9 @@ class OBBject(Tagged, Generic[T]):
     _standard_params: Optional[Dict[str, Any]] = PrivateAttr(
         default_factory=dict,
     )
+    _extra_params: Optional[Dict[str, Any]] = PrivateAttr(
+        default_factory=dict,
+    )
 
     def __repr__(self) -> str:
         """Human readable representation of the object."""
@@ -80,50 +82,15 @@ class OBBject(Tagged, Generic[T]):
         ]
         return f"{self.__class__.__name__}\n\n" + "\n".join(items)
 
-    @classmethod
-    def results_type_repr(cls, params: Optional[Any] = None) -> str:
-        """Return the results type name."""
-        results_field = cls.model_fields.get("results")
-        type_ = params[0] if params else results_field.annotation
-        name = type_.__name__ if hasattr(type_, "__name__") else str(type_)
-
-        if (json_schema_extra := results_field.json_schema_extra) is not None:
-            model = json_schema_extra.get("model")
-
-            if json_schema_extra.get("is_union"):
-                return f"Union[List[{model}], {model}]"
-            if json_schema_extra.get("has_list"):
-                return f"List[{model}]"
-
-            return model
-
-        if "typing." in str(type_):
-            unpack_optional = sub(r"Optional\[(.*)\]", r"\1", str(type_))
-            name = sub(
-                r"(\w+\.)*(\w+)?(\, NoneType)?",
-                r"\2",
-                unpack_optional,
-            )
-
-        return name
-
-    @classmethod
-    def model_parametrized_name(cls, params: Any) -> str:
-        """Return the model name with the parameters."""
-        return f"OBBject[{cls.results_type_repr(params)}]"
-
     def to_df(
-        self, index: Optional[Union[str, None]] = "date", sort_by: Optional[str] = None
-    ) -> pd.DataFrame:
-        """Alias for `to_dataframe`."""
-        return self.to_dataframe(index=index, sort_by=sort_by)
+        self,
+        index: Optional[Union[str, None]] = "date",
+        sort_by: Optional[str] = None,
+        ascending: Optional[bool] = None,
+    ) -> "DataFrame":
+        """Alias for `to_dataframe`.
 
-    def to_dataframe(
-        self, index: Optional[Union[str, None]] = "date", sort_by: Optional[str] = None
-    ) -> pd.DataFrame:
-        """Convert results field to pandas dataframe.
-
-        Supports converting creating pandas DataFrames from the following
+        Supports converting creating Pandas DataFrames from the following
         serializable data formats:
 
         - List[BaseModel]
@@ -136,18 +103,66 @@ class OBBject(Tagged, Generic[T]):
         - Dict[str, List]
         - Dict[str, BaseModel]
 
+        Other supported formats:
+        - str
+
         Parameters
         ----------
         index : Optional[str]
             Column name to use as index.
         sort_by : Optional[str]
             Column name to sort by.
+        ascending: Optional[bool]
+            Sort by ascending for each column specified in `sort_by`.
 
         Returns
         -------
-        pd.DataFrame
-            Pandas dataframe.
+        DataFrame
+            Pandas DataFrame.
         """
+        return self.to_dataframe(index=index, sort_by=sort_by, ascending=ascending)
+
+    def to_dataframe(
+        self,
+        index: Optional[Union[str, None]] = "date",
+        sort_by: Optional[str] = None,
+        ascending: Optional[bool] = None,
+    ) -> "DataFrame":
+        """Convert results field to Pandas DataFrame.
+
+        Supports converting creating Pandas DataFrames from the following
+        serializable data formats:
+
+        - List[BaseModel]
+        - List[Dict]
+        - List[List]
+        - List[str]
+        - List[int]
+        - List[float]
+        - Dict[str, Dict]
+        - Dict[str, List]
+        - Dict[str, BaseModel]
+
+        Other supported formats:
+        - str
+
+        Parameters
+        ----------
+        index : Optional[str]
+            Column name to use as index.
+        sort_by : Optional[str]
+            Column name to sort by.
+        ascending: Optional[bool]
+            Sort by ascending for each column specified in `sort_by`.
+
+        Returns
+        -------
+        DataFrame
+            Pandas DataFrame.
+        """
+        # pylint: disable=import-outside-toplevel
+        from pandas import DataFrame, concat  # noqa
+        from openbb_core.app.utils import basemodel_to_df  # noqa
 
         def is_list_of_basemodel(items: Union[List[T], T]) -> bool:
             return isinstance(items, list) and all(
@@ -157,7 +172,7 @@ class OBBject(Tagged, Generic[T]):
         if self.results is None or not self.results:
             raise OpenBBError("Results not found.")
 
-        if isinstance(self.results, pd.DataFrame):
+        if isinstance(self.results, DataFrame):
             return self.results
 
         try:
@@ -165,8 +180,13 @@ class OBBject(Tagged, Generic[T]):
             df = None
             sort_columns = True
 
+            # BaseModel
+            if isinstance(res, BaseModel):
+                df = DataFrame(res.model_dump(exclude_unset=True, exclude_none=True))
+                sort_columns = False
+
             # List[Dict]
-            if isinstance(res, list) and len(res) == 1 and isinstance(res[0], dict):
+            elif isinstance(res, list) and len(res) == 1 and isinstance(res[0], dict):
                 r = res[0]
                 dict_of_df = {}
 
@@ -177,29 +197,40 @@ class OBBject(Tagged, Generic[T]):
                         sort_columns = False
                     # Dict[str, Any]
                     else:
-                        dict_of_df[k] = pd.DataFrame(v)
+                        dict_of_df[k] = DataFrame(v)
 
-                df = pd.concat(dict_of_df, axis=1)
+                df = concat(dict_of_df, axis=1)
 
             # List[BaseModel]
             elif is_list_of_basemodel(res):
                 dt: Union[List[Data], Data] = res  # type: ignore
-                df = basemodel_to_df(dt, index)
-                sort_columns = False
+                r = dt[0] if isinstance(dt, list) and len(dt) == 1 else None  # type: ignore
+                if r and all(
+                    prop.get("type") == "array"
+                    for prop in r.model_json_schema()["properties"].values()  # type: ignore
+                ):
+                    sort_columns = False
+                    df = DataFrame(r.model_dump(exclude_unset=True, exclude_none=True))  # type: ignore
+                else:
+                    df = basemodel_to_df(dt, index)
+                    sort_columns = False
+            # str
+            elif isinstance(res, str):
+                df = DataFrame([res])
             # List[List | str | int | float] | Dict[str, Dict | List | BaseModel]
             else:
                 try:
-                    df = pd.DataFrame(res)
-                    # Set index, if any
-                    if index is not None and index in df.columns:
-                        df.set_index(index, inplace=True)
-
+                    df = DataFrame(res)  # type: ignore[call-overload]
                 except ValueError:
                     if isinstance(res, dict):
-                        df = pd.DataFrame([res])
+                        df = DataFrame([res])
 
             if df is None:
                 raise OpenBBError("Unsupported data format.")
+
+            # Set index, if any
+            if index is not None and index in df.columns:
+                df.set_index(index, inplace=True)
 
             # Drop columns that are all NaN, but don't rearrange columns
             if sort_columns:
@@ -208,7 +239,11 @@ class OBBject(Tagged, Generic[T]):
 
             # Sort by specified column
             if sort_by:
-                df.sort_values(by=sort_by, inplace=True)
+                df.sort_values(
+                    by=sort_by,
+                    ascending=ascending if ascending is not None else True,
+                    inplace=True,
+                )
 
         except OpenBBError as e:
             raise e
@@ -225,7 +260,7 @@ class OBBject(Tagged, Generic[T]):
 
         return df
 
-    def to_polars(self) -> "PolarsDataFrame":
+    def to_polars(self) -> "PolarsDataFrame":  # type: ignore
         """Convert results field to polars dataframe."""
         try:
             from polars import from_pandas  # type: ignore # pylint: disable=import-outside-toplevel
@@ -236,7 +271,7 @@ class OBBject(Tagged, Generic[T]):
 
         return from_pandas(self.to_dataframe(index=None))
 
-    def to_numpy(self) -> ndarray:
+    def to_numpy(self) -> "ndarray":
         """Convert results field to numpy array."""
         return self.to_dataframe(index=None).to_numpy()
 
@@ -245,38 +280,51 @@ class OBBject(Tagged, Generic[T]):
         orient: Literal[
             "dict", "list", "series", "split", "tight", "records", "index"
         ] = "list",
-    ) -> Dict[str, List]:
-        """Convert results field to a dictionary using any of pandas to_dict options.
+    ) -> Union[Dict[Hashable, Any], List[Dict[Hashable, Any]]]:
+        """Convert results field to a dictionary using any of Pandas `to_dict` options.
 
         Parameters
         ----------
         orient : Literal["dict", "list", "series", "split", "tight", "records", "index"]
             Value to pass to `.to_dict()` method
 
+        Returns
+        -------
+        Union[Dict[Hashable, Any], List[Dict[Hashable, Any]]]
+            Dictionary of lists or list of dictionaries if orient is "records".
+        """
+        df = self.to_dataframe(index=None)
+        if (
+            orient == "list"
+            and isinstance(self.results, dict)
+            and all(
+                isinstance(value, dict)
+                for value in self.results.values()  # pylint: disable=no-member
+            )
+        ):
+            df = df.T
+        results = df.to_dict(orient=orient)
+        if isinstance(results, dict) and orient == "list" and "index" in results:
+            del results["index"]
+        return results
+
+    def to_llm(self) -> Union[Dict[Hashable, Any], List[Dict[Hashable, Any]]]:
+        """Convert results field to an LLM compatible output.
 
         Returns
         -------
-        Dict[str, List]
-            Dictionary of lists.
+        Union[Dict[Hashable, Any], List[Dict[Hashable, Any]]]
+            Dictionary of lists or list of dictionaries if orient is "records".
         """
-        df = self.to_dataframe(index=None)  # type: ignore
-        transpose = False
-        if orient == "list":
-            transpose = True
-            if not isinstance(self.results, dict):
-                transpose = False
-            else:  # Only enter the loop if self.results is a dictionary
-                self.results: Dict[str, Any] = self.results  # type: ignore
-                for _, value in self.results.items():
-                    if not isinstance(value, dict):
-                        transpose = False
-                        break
-        if transpose:
-            df = df.T
-        results = df.to_dict(orient=orient)
-        if orient == "list" and "index" in results:
-            del results["index"]
-        return results
+        df = self.to_dataframe(index=None)
+
+        results = df.to_json(
+            orient="records",
+            date_format="iso",
+            date_unit="s",
+        )
+
+        return results  # type: ignore
 
     def show(self, **kwargs: Any) -> None:
         """Display chart."""
@@ -300,4 +348,9 @@ class OBBject(Tagged, Generic[T]):
         OBBject[ResultsType]
             OBBject with results.
         """
-        return cls(results=await query.execute())
+        results = await query.execute()
+        if isinstance(results, AnnotatedResult):
+            return cls(
+                results=results.result, extra={"results_metadata": results.metadata}
+            )
+        return cls(results=results)

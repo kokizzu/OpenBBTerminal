@@ -10,6 +10,7 @@ from datetime import (
 )
 from typing import Any, Dict, List, Literal, Optional, Union
 
+from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.price_target import (
     PriceTargetData,
@@ -17,9 +18,7 @@ from openbb_core.provider.standard_models.price_target import (
 )
 from openbb_core.provider.utils.descriptions import QUERY_DESCRIPTIONS
 from openbb_core.provider.utils.errors import EmptyDataError
-from openbb_core.provider.utils.helpers import amake_requests, get_querystring
 from pydantic import Field, field_validator, model_validator
-from pytz import UTC
 
 COVERAGE_DICT = {
     "downgrades": "Downgrades",
@@ -45,8 +44,37 @@ class BenzingaPriceTargetQueryParams(PriceTargetQueryParams):
     __alias_dict__ = {
         "limit": "pagesize",
         "symbol": "parameters[tickers]",
+        "date": "parameters[date]",
+        "start_date": "parameters[date_from]",
+        "end_date": "parameters[date_to]",
+        "updated": "parameters[updated]",
+        "importance": "parameters[importance]",
+        "action": "parameters[action]",
+        "analyst_ids": "parameters[analyst_id]",
+        "firm_ids": "parameters[firm_id]",
     }
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {
+        "symbol": {"multiple_items_allowed": True},
+        "analyst_ids": {"multiple_items_allowed": True},
+        "firm_ids": {"multiple_items_allowed": True},
+        "fields": {"multiple_items_allowed": True},
+        "action": {
+            "multiple_items_allowed": False,
+            "choices": [
+                "downgrades",
+                "maintains",
+                "reinstates",
+                "reiterates",
+                "upgrades",
+                "assumes",
+                "initiates",
+                "terminates",
+                "removes",
+                "suspends",
+                "firm_dissolved",
+            ],
+        },
+    }
 
     page: Optional[int] = Field(
         default=0,
@@ -57,17 +85,14 @@ class BenzingaPriceTargetQueryParams(PriceTargetQueryParams):
     date: Optional[dateType] = Field(
         default=None,
         description="Date for calendar data, shorthand for date_from and date_to.",
-        alias="parameters[date]",
     )
     start_date: Optional[dateType] = Field(
         default=None,
         description=QUERY_DESCRIPTIONS.get("start_date", ""),
-        alias="parameters[date_from]",
     )
     end_date: Optional[dateType] = Field(
         default=None,
         description=QUERY_DESCRIPTIONS.get("end_date", ""),
-        alias="parameters[date_to]",
     )
     updated: Optional[Union[dateType, int]] = Field(
         default=None,
@@ -75,16 +100,13 @@ class BenzingaPriceTargetQueryParams(PriceTargetQueryParams):
         + " This will force the sort order to be Greater Than or Equal to the timestamp indicated."
         + " The date can be a date string or a Unix timestamp."
         + " The date string must be in the format of YYYY-MM-DD.",
-        alias="parameters[updated]",
     )
     importance: Optional[int] = Field(
         default=None,
         description="Importance level to filter by."
         + " Uses Greater Than or Equal To the importance indicated",
-        alias="parameters[importance]",
     )
-    action: Union[
-        None,
+    action: Optional[
         Literal[
             "downgrades",
             "maintains",
@@ -97,22 +119,19 @@ class BenzingaPriceTargetQueryParams(PriceTargetQueryParams):
             "removes",
             "suspends",
             "firm_dissolved",
-        ],
+        ]
     ] = Field(
         default=None,
         description="Filter by a specific action_company.",
-        alias="parameters[action]",
     )
     analyst_ids: Optional[Union[List[str], str]] = Field(
         default=None,
         description="Comma-separated list of analyst (person) IDs."
         + " Omitting will bring back all available analysts.",
-        alias="parameters[analyst_id]",
     )
     firm_ids: Optional[Union[List[str], str]] = Field(
         default=None,
         description="Comma-separated list of firm IDs.",
-        alias="parameters[firm_id]",
     )
     fields: Optional[Union[List[str], str]] = Field(
         default=None,
@@ -164,10 +183,12 @@ class BenzingaPriceTargetData(PriceTargetData):
         "company_name": "name",
         "rating_previous": "rating_prior",
         "url_analyst": "url",
+        "action": "action_company",
+        "action_change": "action_pt",
+        "last_updated": "updated",
     }
 
-    action: Union[
-        None,
+    action: Optional[
         Literal[
             "Downgrades",
             "Maintains",
@@ -180,22 +201,19 @@ class BenzingaPriceTargetData(PriceTargetData):
             "Removes",
             "Suspends",
             "Firm Dissolved",
-        ],
+        ]
     ] = Field(
         default=None,
         description="Description of the change in rating from firm's last rating."
         "Note that all of these terms are precisely defined.",
-        alias="action_company",
     )
-    action_change: Union[
-        None,
-        Literal["Announces", "Maintains", "Lowers", "Raises", "Removes", "Adjusts"],
+    action_change: Optional[
+        Literal["Announces", "Maintains", "Lowers", "Raises", "Removes", "Adjusts"]
     ] = Field(
         default=None,
         description="Description of the change in price target from firm's last price target.",
-        alias="action_pt",
     )
-    importance: Union[None, Literal[0, 1, 2, 3, 4, 5]] = Field(
+    importance: Optional[Literal[0, 1, 2, 3, 4, 5]] = Field(
         default=None,
         description="Subjective Basis of How Important Event is to Market. 5 = High",
     )
@@ -213,7 +231,6 @@ class BenzingaPriceTargetData(PriceTargetData):
     last_updated: Optional[datetime] = Field(
         default=None,
         description="Last updated timestamp, UTC.",
-        alias="updated",
     )
 
     @field_validator("published_date", mode="before", check_fields=False)
@@ -224,12 +241,15 @@ class BenzingaPriceTargetData(PriceTargetData):
 
     @field_validator("last_updated", mode="before", check_fields=False)
     @classmethod
-    def validate_date(cls, v):
+    def validate_date(cls, v: float) -> Optional[dateType]:
         """Convert the Unix timestamp to a datetime object."""
+        # pylint: disable=import-outside-toplevel
+        from openbb_core.provider.utils.helpers import safe_fromtimestamp
+
         if v:
-            dt = datetime.fromtimestamp(v, UTC)
+            dt = safe_fromtimestamp(v, tz=timezone.utc)
             return dt.date() if dt.time() == dt.min.time() else dt
-        return v
+        return None
 
     @model_validator(mode="before")
     @classmethod
@@ -258,18 +278,30 @@ class BenzingaPriceTargetFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the Benzinga endpoint."""
+        # pylint: disable=import-outside-toplevel
+        from openbb_benzinga.utils.helpers import response_callback
+        from openbb_core.provider.utils.helpers import amake_request, get_querystring
+
         token = credentials.get("benzinga_api_key") if credentials else ""
 
         base_url = "https://api.benzinga.com/api/v2.1/calendar/ratings"
         querystring = get_querystring(query.model_dump(by_alias=True), [])
 
         url = f"{base_url}?{querystring}&token={token}"
-        data = await amake_requests(url, **kwargs)
+        data = await amake_request(url, response_callback=response_callback, **kwargs)
 
-        if not data:
-            raise EmptyDataError()
+        if isinstance(data, dict) and "ratings" not in data:
+            raise OpenBBError(
+                f"Unexpected data format. Expected 'ratings' key, got: {list(data.keys())}"
+            )
+        if not isinstance(data, dict):
+            raise OpenBBError(
+                f"Unexpected data format. Expected dict, got: {type(data)}"
+            )
+        if isinstance(data, dict) and not data.get("ratings"):
+            raise EmptyDataError("No ratings data returned.")
 
-        return data[0].get("ratings")
+        return data["ratings"]
 
     @staticmethod
     def transform_data(

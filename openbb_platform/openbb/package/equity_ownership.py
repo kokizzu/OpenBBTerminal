@@ -3,16 +3,19 @@
 import datetime
 from typing import List, Literal, Optional, Union
 
-from openbb_core.app.model.custom_parameter import OpenBBCustomParameter
+from annotated_types import Ge
+from openbb_core.app.model.field import OpenBBField
 from openbb_core.app.model.obbject import OBBject
 from openbb_core.app.static.container import Container
-from openbb_core.app.static.utils.decorators import validate
+from openbb_core.app.static.utils.decorators import exception_handler, validate
 from openbb_core.app.static.utils.filters import filter_inputs
 from typing_extensions import Annotated
 
 
 class ROUTER_equity_ownership(Container):
     """/equity/ownership
+    form_13f
+    government_trades
     insider_trading
     institutional
     major_holders
@@ -22,20 +25,259 @@ class ROUTER_equity_ownership(Container):
     def __repr__(self) -> str:
         return self.__doc__ or ""
 
+    @exception_handler
+    @validate
+    def form_13f(
+        self,
+        symbol: Annotated[
+            str,
+            OpenBBField(
+                description="Symbol to get data for. A CIK or Symbol can be used."
+            ),
+        ],
+        date: Annotated[
+            Union[datetime.date, None, str],
+            OpenBBField(
+                description="A specific date to get data for. The date represents the end of the reporting period. All form 13F-HR filings are based on the calendar year and are reported quarterly. If a date is not supplied, the most recent filing is returned. Submissions beginning 2013-06-30 are supported."
+            ),
+        ] = None,
+        limit: Annotated[
+            Optional[int],
+            OpenBBField(
+                description="The number of data entries to return. The number of previous filings to return. The date parameter takes priority over this parameter."
+            ),
+        ] = 1,
+        provider: Annotated[
+            Optional[Literal["sec"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: sec."
+            ),
+        ] = None,
+        **kwargs
+    ) -> OBBject:
+        """Get the form 13F.
+
+        The Securities and Exchange Commission's (SEC) Form 13F is a quarterly report
+        that is required to be filed by all institutional investment managers with at least
+        $100 million in assets under management.
+        Managers are required to file Form 13F within 45 days after the last day of the calendar quarter.
+        Most funds wait until the end of this period in order to conceal
+        their investment strategy from competitors and the public.
+
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol to get data for. A CIK or Symbol can be used.
+        date : Union[date, None, str]
+            A specific date to get data for. The date represents the end of the reporting period. All form 13F-HR filings are based on the calendar year and are reported quarterly. If a date is not supplied, the most recent filing is returned. Submissions beginning 2013-06-30 are supported.
+        limit : Optional[int]
+            The number of data entries to return. The number of previous filings to return. The date parameter takes priority over this parameter.
+        provider : Optional[Literal['sec']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: sec.
+
+        Returns
+        -------
+        OBBject
+            results : List[Form13FHR]
+                Serializable results.
+            provider : Optional[Literal['sec']]
+                Provider name.
+            warnings : Optional[List[Warning_]]
+                List of warnings.
+            chart : Optional[Chart]
+                Chart object.
+            extra : Dict[str, Any]
+                Extra info.
+
+        Form13FHR
+        ---------
+        period_ending : date
+            The end-of-quarter date of the filing.
+        issuer : str
+            The name of the issuer.
+        cusip : str
+            The CUSIP of the security.
+        asset_class : str
+            The title of the asset class for the security.
+        security_type : Optional[Literal['SH', 'PRN']]
+            Whether the principal amount represents the number of shares or the principal amount of such class. 'SH' for shares. 'PRN' for principal amount. Convertible debt securities are reported as 'PRN'.
+        option_type : Optional[Literal['call', 'put']]
+            Defined when the holdings being reported are put or call options. Only long positions are reported.
+        investment_discretion : Optional[str]
+            The investment discretion held by the Manager. Sole, shared-defined (DFN), or shared-other (OTR).
+        voting_authority_sole : Optional[int]
+            The number of shares for which the Manager exercises sole voting authority.
+        voting_authority_shared : Optional[int]
+            The number of shares for which the Manager exercises a defined shared voting authority.
+        voting_authority_none : Optional[int]
+            The number of shares for which the Manager exercises no voting authority.
+        principal_amount : int
+            The total number of shares of the class of security or the principal amount of such class. Defined by the 'security_type'. Only long positions are reported
+        value : int
+            The fair market value of the holding of the particular class of security. The value reported for options is the fair market value of the underlying security with respect to the number of shares controlled. Values are rounded to the nearest US dollar and use the closing price of the last trading day of the calendar year or quarter.
+        weight : Optional[float]
+            The weight of the security relative to the market value of all securities in the filing , as a normalized percent. (provider: sec)
+
+        Examples
+        --------
+        >>> from openbb import obb
+        >>> obb.equity.ownership.form_13f(symbol='NVDA', provider='sec')
+        >>> # Enter a date (calendar quarter ending) for a specific report.
+        >>> obb.equity.ownership.form_13f(symbol='BRK-A', date='2016-09-30', provider='sec')
+        >>> # Example finding Michael Burry's filings.
+        >>> cik = obb.regulators.sec.institutions_search("Scion Asset Management").results[0].cik
+        >>> # Use the `limit` parameter to return N number of reports from the most recent.
+        >>> obb.equity.ownership.form_13f(cik, limit=2).to_df()
+        """  # noqa: E501
+
+        return self._run(
+            "/equity/ownership/form_13f",
+            **filter_inputs(
+                provider_choices={
+                    "provider": self._get_provider(
+                        provider,
+                        "equity.ownership.form_13f",
+                        ("sec",),
+                    )
+                },
+                standard_params={
+                    "symbol": symbol,
+                    "date": date,
+                    "limit": limit,
+                },
+                extra_params=kwargs,
+            )
+        )
+
+    @exception_handler
+    @validate
+    def government_trades(
+        self,
+        symbol: Annotated[
+            Union[str, None, List[Optional[str]]],
+            OpenBBField(
+                description="Symbol to get data for. Multiple comma separated items allowed for provider(s): fmp."
+            ),
+        ] = None,
+        chamber: Annotated[
+            Literal["house", "senate", "all"],
+            OpenBBField(description="Government Chamber."),
+        ] = "all",
+        limit: Annotated[
+            Optional[Annotated[int, Ge(ge=0)]],
+            OpenBBField(description="The number of data entries to return."),
+        ] = 100,
+        provider: Annotated[
+            Optional[Literal["fmp"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp."
+            ),
+        ] = None,
+        **kwargs
+    ) -> OBBject:
+        """Obtain government transaction data, including data from the Senate
+        and the House of Representatives.
+
+
+        Parameters
+        ----------
+        symbol : Union[str, None, List[Optional[str]]]
+            Symbol to get data for. Multiple comma separated items allowed for provider(s): fmp.
+        chamber : Literal['house', 'senate', 'all']
+            Government Chamber.
+        limit : Optional[Annotated[int, Ge(ge=0)]]
+            The number of data entries to return.
+        provider : Optional[Literal['fmp']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp.
+
+        Returns
+        -------
+        OBBject
+            results : List[GovernmentTrades]
+                Serializable results.
+            provider : Optional[Literal['fmp']]
+                Provider name.
+            warnings : Optional[List[Warning_]]
+                List of warnings.
+            chart : Optional[Chart]
+                Chart object.
+            extra : Dict[str, Any]
+                Extra info.
+
+        GovernmentTrades
+        ----------------
+        symbol : Optional[str]
+            Symbol representing the entity requested in the data.
+        date : date
+            The date of the data.
+        transaction_date : Optional[date]
+            Date of Transaction.
+        representative : Optional[str]
+            Name of Representative.
+        chamber : Optional[Literal['house', 'senate']]
+            Government Chamber - House or Senate. (provider: fmp)
+        owner : Optional[str]
+            Ownership status (e.g., Spouse, Joint). (provider: fmp)
+        asset_type : Optional[str]
+            Type of asset involved in the transaction. (provider: fmp)
+        asset_description : Optional[str]
+            Description of the asset. (provider: fmp)
+        transaction_type : Optional[str]
+            Type of transaction (e.g., Sale, Purchase). (provider: fmp)
+        amount : Optional[str]
+            Transaction amount range. (provider: fmp)
+        comment : Optional[str]
+            Additional comments on the transaction. (provider: fmp)
+        url : Optional[str]
+            Link to the transaction document. (provider: fmp)
+
+        Examples
+        --------
+        >>> from openbb import obb
+        >>> obb.equity.ownership.government_trades(symbol='AAPL', chamber='all', provider='fmp')
+        >>> obb.equity.ownership.government_trades(limit=500, chamber='all', provider='fmp')
+        """  # noqa: E501
+
+        return self._run(
+            "/equity/ownership/government_trades",
+            **filter_inputs(
+                provider_choices={
+                    "provider": self._get_provider(
+                        provider,
+                        "equity.ownership.government_trades",
+                        ("fmp",),
+                    )
+                },
+                standard_params={
+                    "symbol": symbol,
+                    "chamber": chamber,
+                    "limit": limit,
+                },
+                extra_params=kwargs,
+                info={
+                    "symbol": {"fmp": {"multiple_items_allowed": True, "choices": None}}
+                },
+            )
+        )
+
+    @exception_handler
     @validate
     def insider_trading(
         self,
-        symbol: Annotated[
-            str, OpenBBCustomParameter(description="Symbol to get data for.")
-        ],
+        symbol: Annotated[str, OpenBBField(description="Symbol to get data for.")],
         limit: Annotated[
-            int,
-            OpenBBCustomParameter(description="The number of data entries to return."),
+            int, OpenBBField(description="The number of data entries to return.")
         ] = 500,
-        provider: Optional[Literal["fmp", "intrinio"]] = None,
+        provider: Annotated[
+            Optional[Literal["fmp", "intrinio", "sec"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp, intrinio, sec."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
-        """Insider Trading. Information about insider trading.
+        """Get data about trading by a company's management team and board of directors.
 
         Parameters
         ----------
@@ -43,33 +285,34 @@ class ROUTER_equity_ownership(Container):
             Symbol to get data for.
         limit : int
             The number of data entries to return.
-        provider : Optional[Literal['fmp', 'intrinio']]
-            The provider to use for the query, by default None.
-            If None, the provider specified in defaults is selected or 'fmp' if there is
-            no default.
-        transaction_type : Literal[None, 'award', 'conversion', 'return', 'expire_short', 'in_kind', 'gift', 'expire_long', 'discretionary', 'other', 'small', 'exempt', 'otm', 'purchase', 'sale', 'tender', 'will', 'itm', 'trust']
+        provider : Optional[Literal['fmp', 'intrinio', 'sec']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp, intrinio, sec.
+        transaction_type : Optional[Literal['award', 'conversion', 'return', 'expire_short', 'in_kind', 'gift', 'expire_long', 'discretionary', 'other', 'small', 'exempt', 'otm', 'purchase', 'sale', 'tender', 'will', 'itm', 'trust']]
             Type of the transaction. (provider: fmp)
         start_date : Optional[datetime.date]
-            Start date of the data, in YYYY-MM-DD format. (provider: intrinio)
+            Start date of the data, in YYYY-MM-DD format. (provider: intrinio);
+            Start date of the data, in YYYY-MM-DD format. Wide date ranges can result in long download times. Recommended to use a smaller date range, default is 120 days ago. (provider: sec)
         end_date : Optional[datetime.date]
-            End date of the data, in YYYY-MM-DD format. (provider: intrinio)
+            End date of the data, in YYYY-MM-DD format. (provider: intrinio, sec)
         ownership_type : Optional[Literal['D', 'I']]
             Type of ownership. (provider: intrinio)
         sort_by : Optional[Literal['filing_date', 'updated_on']]
             Field to sort by. (provider: intrinio)
+        use_cache : bool
+            Persist the data locally for future use. Default is True. Each form submission is an individual download and the SEC limits the number of concurrent downloads. This prevents the same file from being downloaded multiple times. (provider: sec)
 
         Returns
         -------
         OBBject
             results : List[InsiderTrading]
                 Serializable results.
-            provider : Optional[Literal['fmp', 'intrinio']]
+            provider : Optional[Literal['fmp', 'intrinio', 'sec']]
                 Provider name.
             warnings : Optional[List[Warning_]]
                 List of warnings.
             chart : Optional[Chart]
                 Chart object.
-            extra: Dict[str, Any]
+            extra : Dict[str, Any]
                 Extra info.
 
         InsiderTrading
@@ -105,38 +348,65 @@ class ROUTER_equity_ownership(Container):
         form_type : Optional[str]
             Form type of the insider trading. (provider: fmp)
         company_name : Optional[str]
-            Name of the company. (provider: intrinio)
+            Name of the company. (provider: intrinio, sec)
         conversion_exercise_price : Optional[float]
-            Conversion/Exercise price of the shares. (provider: intrinio)
+            Conversion/Exercise price of the shares. (provider: intrinio);
+            Price of conversion or exercise of the securities. (provider: sec)
         deemed_execution_date : Optional[date]
-            Deemed execution date of the trade. (provider: intrinio)
+            Deemed execution date of the trade. (provider: intrinio);
+            Deemed execution date. (provider: sec)
         exercise_date : Optional[date]
-            Exercise date of the trade. (provider: intrinio)
+            Exercise date of the trade. (provider: intrinio);
+            Date of exercise. (provider: sec)
         expiration_date : Optional[date]
-            Expiration date of the derivative. (provider: intrinio)
+            Expiration date of the derivative. (provider: intrinio);
+            Date of expiration for the derivative. (provider: sec)
         underlying_security_title : Optional[str]
-            Name of the underlying non-derivative security related to this derivative transaction. (provider: intrinio)
-        underlying_shares : Optional[Union[float, int]]
+            Name of the underlying non-derivative security related to this derivative transaction. (provider: intrinio);
+            Title of the underlying security. (provider: sec)
+        underlying_shares : Optional[Union[int, float]]
             Number of underlying shares related to this derivative transaction. (provider: intrinio)
         nature_of_ownership : Optional[str]
-            Nature of ownership of the insider trading. (provider: intrinio)
+            Nature of ownership of the insider trading. (provider: intrinio);
+            Nature of the ownership. (provider: sec)
         director : Optional[bool]
-            Whether the owner is a director. (provider: intrinio)
+            Whether the owner is a director. (provider: intrinio, sec)
         officer : Optional[bool]
-            Whether the owner is an officer. (provider: intrinio)
+            Whether the owner is an officer. (provider: intrinio, sec)
         ten_percent_owner : Optional[bool]
-            Whether the owner is a 10% owner. (provider: intrinio)
+            Whether the owner is a 10% owner. (provider: intrinio, sec)
         other_relation : Optional[bool]
             Whether the owner is having another relation. (provider: intrinio)
         derivative_transaction : Optional[bool]
             Whether the owner is having a derivative transaction. (provider: intrinio)
         report_line_number : Optional[int]
             Report line number of the insider trading. (provider: intrinio)
+        form : Optional[Union[int, str]]
+            Form type. (provider: sec)
+        other : Optional[bool]
+            Whether the owner is classified as other. (provider: sec)
+        other_text : Optional[str]
+            Text for other classification. (provider: sec)
+        transaction_timeliness : Optional[str]
+            Timeliness of the transaction. (provider: sec)
+        ownership_type : Optional[str]
+            Type of ownership, direct or indirect. (provider: sec)
+        underlying_security_shares : Optional[float]
+            Number of underlying shares associated with the derivative. (provider: sec)
+        underlying_security_value : Optional[float]
+            Value of the underlying security. (provider: sec)
+        transaction_value : Optional[float]
+            Total value of the transaction. (provider: sec)
+        value_owned : Optional[float]
+            Value of the securities owned after the transaction. (provider: sec)
+        footnote : Optional[str]
+            Footnote for the transaction. (provider: sec)
 
-        Example
-        -------
+        Examples
+        --------
         >>> from openbb import obb
-        >>> obb.equity.ownership.insider_trading(symbol="AAPL", limit=500)
+        >>> obb.equity.ownership.insider_trading(symbol='AAPL', provider='fmp')
+        >>> obb.equity.ownership.insider_trading(symbol='AAPL', limit=500, provider='intrinio')
         """  # noqa: E501
 
         return self._run(
@@ -145,8 +415,8 @@ class ROUTER_equity_ownership(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/equity/ownership/insider_trading",
-                        ("fmp", "intrinio"),
+                        "equity.ownership.insider_trading",
+                        ("fmp", "intrinio", "sec"),
                     )
                 },
                 standard_params={
@@ -154,47 +424,74 @@ class ROUTER_equity_ownership(Container):
                     "limit": limit,
                 },
                 extra_params=kwargs,
+                info={
+                    "transaction_type": {
+                        "fmp": {
+                            "multiple_items_allowed": False,
+                            "choices": [
+                                "award",
+                                "conversion",
+                                "return",
+                                "expire_short",
+                                "in_kind",
+                                "gift",
+                                "expire_long",
+                                "discretionary",
+                                "other",
+                                "small",
+                                "exempt",
+                                "otm",
+                                "purchase",
+                                "sale",
+                                "tender",
+                                "will",
+                                "itm",
+                                "trust",
+                            ],
+                        }
+                    }
+                },
             )
         )
 
+    @exception_handler
     @validate
     def institutional(
         self,
-        symbol: Annotated[
-            str, OpenBBCustomParameter(description="Symbol to get data for.")
-        ],
-        provider: Optional[Literal["fmp", "intrinio"]] = None,
+        symbol: Annotated[str, OpenBBField(description="Symbol to get data for.")],
+        provider: Annotated[
+            Optional[Literal["fmp"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
-        """Institutional Ownership. Institutional ownership data.
+        """Get data about institutional ownership for a given company over time.
 
         Parameters
         ----------
         symbol : str
             Symbol to get data for.
-        provider : Optional[Literal['fmp', 'intrinio']]
-            The provider to use for the query, by default None.
-            If None, the provider specified in defaults is selected or 'fmp' if there is
-            no default.
+        provider : Optional[Literal['fmp']]
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp.
         include_current_quarter : Optional[bool]
             Include current quarter data. (provider: fmp)
         date : Optional[datetime.date]
             A specific date to get data for. (provider: fmp)
-        limit : Optional[int]
-            The number of data entries to return. (provider: intrinio)
 
         Returns
         -------
         OBBject
             results : List[InstitutionalOwnership]
                 Serializable results.
-            provider : Optional[Literal['fmp', 'intrinio']]
+            provider : Optional[Literal['fmp']]
                 Provider name.
             warnings : Optional[List[Warning_]]
                 List of warnings.
             chart : Optional[Chart]
                 Chart object.
-            extra: Dict[str, Any]
+            extra : Dict[str, Any]
                 Extra info.
 
         InstitutionalOwnership
@@ -271,29 +568,11 @@ class ROUTER_equity_ownership(Container):
             Put-call ratio on the previous reporting date. (provider: fmp)
         put_call_ratio_change : Optional[float]
             Change in the put-call ratio between the current and previous reporting dates. (provider: fmp)
-        name : Optional[str]
-            Name of the institutional owner. (provider: intrinio)
-        value : Optional[float]
-            Value of the institutional owner. (provider: intrinio)
-        amount : Optional[float]
-            Amount of the institutional owner. (provider: intrinio)
-        sole_voting_authority : Optional[float]
-            Sole voting authority of the institutional owner. (provider: intrinio)
-        shared_voting_authority : Optional[float]
-            Shared voting authority of the institutional owner. (provider: intrinio)
-        no_voting_authority : Optional[float]
-            No voting authority of the institutional owner. (provider: intrinio)
-        previous_amount : Optional[float]
-            Previous amount of the institutional owner. (provider: intrinio)
-        amount_change : Optional[float]
-            Amount change of the institutional owner. (provider: intrinio)
-        amount_percent_change : Optional[float]
-            Amount percent change of the institutional owner. (provider: intrinio)
 
-        Example
-        -------
+        Examples
+        --------
         >>> from openbb import obb
-        >>> obb.equity.ownership.institutional(symbol="AAPL")
+        >>> obb.equity.ownership.institutional(symbol='AAPL', provider='fmp')
         """  # noqa: E501
 
         return self._run(
@@ -302,8 +581,8 @@ class ROUTER_equity_ownership(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/equity/ownership/institutional",
-                        ("fmp", "intrinio"),
+                        "equity.ownership.institutional",
+                        ("fmp",),
                     )
                 },
                 standard_params={
@@ -313,37 +592,38 @@ class ROUTER_equity_ownership(Container):
             )
         )
 
+    @exception_handler
     @validate
     def major_holders(
         self,
-        symbol: Annotated[
-            str, OpenBBCustomParameter(description="Symbol to get data for.")
-        ],
+        symbol: Annotated[str, OpenBBField(description="Symbol to get data for.")],
         date: Annotated[
             Union[datetime.date, None, str],
-            OpenBBCustomParameter(description="A specific date to get data for."),
+            OpenBBField(description="A specific date to get data for."),
         ] = None,
         page: Annotated[
-            Optional[int],
-            OpenBBCustomParameter(description="Page number of the data to fetch."),
+            Optional[int], OpenBBField(description="Page number of the data to fetch.")
         ] = 0,
-        provider: Optional[Literal["fmp"]] = None,
+        provider: Annotated[
+            Optional[Literal["fmp"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
-        """Equity Ownership. Information about the company ownership.
+        """Get data about major holders for a given company over time.
 
         Parameters
         ----------
         symbol : str
             Symbol to get data for.
-        date : Union[datetime.date, None, str]
+        date : Union[date, None, str]
             A specific date to get data for.
         page : Optional[int]
             Page number of the data to fetch.
         provider : Optional[Literal['fmp']]
-            The provider to use for the query, by default None.
-            If None, the provider specified in defaults is selected or 'fmp' if there is
-            no default.
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp.
 
         Returns
         -------
@@ -356,7 +636,7 @@ class ROUTER_equity_ownership(Container):
                 List of warnings.
             chart : Optional[Chart]
                 Chart object.
-            extra: Dict[str, Any]
+            extra : Dict[str, Any]
                 Extra info.
 
         EquityOwnership
@@ -440,10 +720,11 @@ class ROUTER_equity_ownership(Container):
         is_counted_for_performance : bool
             Is the stock ownership counted for performance.
 
-        Example
-        -------
+        Examples
+        --------
         >>> from openbb import obb
-        >>> obb.equity.ownership.major_holders(symbol="AAPL", page=0)
+        >>> obb.equity.ownership.major_holders(symbol='AAPL', provider='fmp')
+        >>> obb.equity.ownership.major_holders(symbol='AAPL', page=0, provider='fmp')
         """  # noqa: E501
 
         return self._run(
@@ -452,7 +733,7 @@ class ROUTER_equity_ownership(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/equity/ownership/major_holders",
+                        "equity.ownership.major_holders",
                         ("fmp",),
                     )
                 },
@@ -465,28 +746,32 @@ class ROUTER_equity_ownership(Container):
             )
         )
 
+    @exception_handler
     @validate
     def share_statistics(
         self,
         symbol: Annotated[
             Union[str, List[str]],
-            OpenBBCustomParameter(
-                description="Symbol to get data for. Multiple items allowed: yfinance."
+            OpenBBField(
+                description="Symbol to get data for. Multiple comma separated items allowed for provider(s): yfinance."
             ),
         ],
-        provider: Optional[Literal["fmp", "intrinio", "yfinance"]] = None,
+        provider: Annotated[
+            Optional[Literal["fmp", "intrinio", "yfinance"]],
+            OpenBBField(
+                description="The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp, intrinio, yfinance."
+            ),
+        ] = None,
         **kwargs
     ) -> OBBject:
-        """Share Statistics. Share statistics for a given company.
+        """Get data about share float for a given company.
 
         Parameters
         ----------
         symbol : Union[str, List[str]]
-            Symbol to get data for. Multiple items allowed: yfinance.
+            Symbol to get data for. Multiple comma separated items allowed for provider(s): yfinance.
         provider : Optional[Literal['fmp', 'intrinio', 'yfinance']]
-            The provider to use for the query, by default None.
-            If None, the provider specified in defaults is selected or 'fmp' if there is
-            no default.
+            The provider to use, by default None. If None, the priority list configured in the settings is used. Default priority: fmp, intrinio, yfinance.
 
         Returns
         -------
@@ -499,7 +784,7 @@ class ROUTER_equity_ownership(Container):
                 List of warnings.
             chart : Optional[Chart]
                 Chart object.
-            extra: Dict[str, Any]
+            extra : Dict[str, Any]
                 Extra info.
 
         ShareStatistics
@@ -541,10 +826,10 @@ class ROUTER_equity_ownership(Container):
         institutions_count : Optional[int]
             Number of institutions holding shares. (provider: yfinance)
 
-        Example
-        -------
+        Examples
+        --------
         >>> from openbb import obb
-        >>> obb.equity.ownership.share_statistics(symbol="AAPL")
+        >>> obb.equity.ownership.share_statistics(symbol='AAPL', provider='fmp')
         """  # noqa: E501
 
         return self._run(
@@ -553,7 +838,7 @@ class ROUTER_equity_ownership(Container):
                 provider_choices={
                     "provider": self._get_provider(
                         provider,
-                        "/equity/ownership/share_statistics",
+                        "equity.ownership.share_statistics",
                         ("fmp", "intrinio", "yfinance"),
                     )
                 },
@@ -561,6 +846,10 @@ class ROUTER_equity_ownership(Container):
                     "symbol": symbol,
                 },
                 extra_params=kwargs,
-                extra_info={"symbol": {"multiple_items_allowed": ["yfinance"]}},
+                info={
+                    "symbol": {
+                        "yfinance": {"multiple_items_allowed": True, "choices": None}
+                    }
+                },
             )
         )

@@ -12,7 +12,7 @@ from openbb_yfinance.models.currency_historical import YFinanceCurrencyHistorica
 from openbb_yfinance.models.equity_historical import YFinanceEquityHistoricalFetcher
 from openbb_yfinance.models.equity_profile import YFinanceEquityProfileFetcher
 from openbb_yfinance.models.equity_quote import YFinanceEquityQuoteFetcher
-from openbb_yfinance.models.etf_historical import YFinanceEtfHistoricalFetcher
+from openbb_yfinance.models.equity_screener import YFinanceEquityScreenerFetcher
 from openbb_yfinance.models.etf_info import YFinanceEtfInfoFetcher
 from openbb_yfinance.models.futures_curve import YFinanceFuturesCurveFetcher
 from openbb_yfinance.models.futures_historical import YFinanceFuturesHistoricalFetcher
@@ -28,9 +28,7 @@ from openbb_yfinance.models.index_historical import (
 from openbb_yfinance.models.key_executives import YFinanceKeyExecutivesFetcher
 from openbb_yfinance.models.key_metrics import YFinanceKeyMetricsFetcher
 from openbb_yfinance.models.losers import YFLosersFetcher
-from openbb_yfinance.models.market_indices import (
-    YFinanceMarketIndicesFetcher,
-)
+from openbb_yfinance.models.options_chains import YFinanceOptionsChainsFetcher
 from openbb_yfinance.models.price_target_consensus import (
     YFinancePriceTargetConsensusFetcher,
 )
@@ -42,10 +40,10 @@ from openbb_yfinance.models.undervalued_large_caps import YFUndervaluedLargeCaps
 
 yfinance_provider = Provider(
     name="yfinance",
-    website="https://finance.yahoo.com/",
+    website="https://finance.yahoo.com",
     description="""Yahoo! Finance is a web-based platform that offers financial news,
-    data, and tools for investors and individuals interested in tracking and analyzing
-    financial markets and assets.""",
+data, and tools for investors and individuals interested in tracking and analyzing
+financial markets and assets.""",
     fetcher_dict={
         "AvailableIndices": YFinanceAvailableIndicesFetcher,
         "BalanceSheet": YFinanceBalanceSheetFetcher,
@@ -60,9 +58,10 @@ yfinance_provider = Provider(
         "EquityInfo": YFinanceEquityProfileFetcher,
         "EquityLosers": YFLosersFetcher,
         "EquityQuote": YFinanceEquityQuoteFetcher,
+        "EquityScreener": YFinanceEquityScreenerFetcher,
         "EquityUndervaluedGrowth": YFUndervaluedGrowthEquitiesFetcher,
         "EquityUndervaluedLargeCaps": YFUndervaluedLargeCapsFetcher,
-        "EtfHistorical": YFinanceEtfHistoricalFetcher,
+        "EtfHistorical": YFinanceEquityHistoricalFetcher,
         "EtfInfo": YFinanceEtfInfoFetcher,
         "FuturesCurve": YFinanceFuturesCurveFetcher,
         "FuturesHistorical": YFinanceFuturesHistoricalFetcher,
@@ -72,8 +71,9 @@ yfinance_provider = Provider(
         "IndexHistorical": YFinanceIndexHistoricalFetcher,
         "KeyExecutives": YFinanceKeyExecutivesFetcher,
         "KeyMetrics": YFinanceKeyMetricsFetcher,
-        "MarketIndices": YFinanceMarketIndicesFetcher,
+        "OptionsChains": YFinanceOptionsChainsFetcher,
         "PriceTargetConsensus": YFinancePriceTargetConsensusFetcher,
         "ShareStatistics": YFinanceShareStatisticsFetcher,
     },
+    repr_name="Yahoo Finance",
 )

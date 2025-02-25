@@ -1,12 +1,10 @@
 """Yahoo Finance Futures Historical Price Model."""
 
 # pylint: disable=unused-argument
-# ruff: noqa: SIM105
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
-from dateutil.relativedelta import relativedelta
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.futures_historical import (
     FuturesHistoricalData,
@@ -14,9 +12,7 @@ from openbb_core.provider.standard_models.futures_historical import (
 )
 from openbb_core.provider.utils.descriptions import QUERY_DESCRIPTIONS
 from openbb_core.provider.utils.errors import EmptyDataError
-from openbb_yfinance.utils.helpers import get_futures_data, yf_download
-from openbb_yfinance.utils.references import INTERVALS, MONTHS, PERIODS
-from pandas import Timestamp, to_datetime
+from openbb_yfinance.utils.references import INTERVALS_DICT, MONTHS
 from pydantic import Field, field_validator
 
 
@@ -26,11 +22,25 @@ class YFinanceFuturesHistoricalQueryParams(FuturesHistoricalQueryParams):
     Source: https://finance.yahoo.com/crypto/
     """
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
 
-    interval: Optional[INTERVALS] = Field(default="1d", description="Data granularity.")
-    period: Optional[PERIODS] = Field(
-        default=None, description=QUERY_DESCRIPTIONS.get("period", "")
+    interval: Literal[
+        "1m",
+        "2m",
+        "5m",
+        "15m",
+        "30m",
+        "60m",
+        "90m",
+        "1h",
+        "1d",
+        "5d",
+        "1W",
+        "1M",
+        "1Q",
+    ] = Field(
+        default="1d",
+        description=QUERY_DESCRIPTIONS.get("interval", ""),
     )
 
 
@@ -41,6 +51,9 @@ class YFinanceFuturesHistoricalData(FuturesHistoricalData):
     @classmethod
     def date_validate(cls, v):
         """Return datetime object from string."""
+        # pylint: disable=import-outside-toplevel
+        from pandas import Timestamp
+
         if isinstance(v, Timestamp):
             return v.to_pydatetime()
         return v
@@ -56,7 +69,11 @@ class YFinanceFuturesHistoricalFetcher(
 
     @staticmethod
     def transform_query(params: Dict[str, Any]) -> YFinanceFuturesHistoricalQueryParams:
-        """Transform the query. Setting the start and end dates for a 1 year period."""
+        """Transform the query."""
+        # pylint: disable=import-outside-toplevel
+        from dateutil.relativedelta import relativedelta
+        from openbb_yfinance.utils.helpers import get_futures_data
+
         transformed_params = params.copy()
 
         symbols = params["symbol"].split(",")
@@ -71,11 +88,9 @@ class YFinanceFuturesHistoricalFetcher(
                     exchange = futures_data[futures_data["Ticker"] == symbol][
                         "Exchange"
                     ].values[0]
-                new_symbol = (
-                    f"{symbol}{MONTHS[expiry_date.month]}{str(expiry_date.year)[-2:]}.{exchange}"
-                    if "." not in symbol
-                    else symbol
-                )
+                    new_symbol = f"{symbol}{MONTHS[expiry_date.month]}{str(expiry_date.year)[-2:]}.{exchange}"
+                else:
+                    new_symbol = symbol
                 new_symbols.append(new_symbol)
             else:
                 new_symbols.append(symbol)
@@ -108,11 +123,14 @@ class YFinanceFuturesHistoricalFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the Yahoo Finance endpoint."""
+        # pylint: disable=import-outside-toplevel
+        from openbb_yfinance.utils.helpers import yf_download
+
         data = yf_download(
             query.symbol,
-            start=query.start_date,
-            end=query.end_date,
-            interval=query.interval,  # type: ignore
+            start_date=query.start_date,
+            end_date=query.end_date,
+            interval=INTERVALS_DICT[query.interval],  # type: ignore
             prepost=True,
             auto_adjust=False,
             actions=False,
@@ -120,23 +138,6 @@ class YFinanceFuturesHistoricalFetcher(
 
         if data.empty:
             raise EmptyDataError()
-
-        days = (
-            1
-            if query.interval in ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "90m"]
-            else 0
-        )
-        if "date" in data.columns:
-            data.set_index("date", inplace=True)
-            data.index = to_datetime(data.index)
-        if query.start_date:
-            data = data[
-                (data.index >= to_datetime(query.start_date))
-                & (data.index <= to_datetime(query.end_date + timedelta(days=days)))
-            ]
-
-        data.reset_index(inplace=True)
-        data.rename(columns={"index": "date"}, inplace=True)
 
         return data.to_dict("records")
 

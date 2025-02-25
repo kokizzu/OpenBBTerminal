@@ -1,24 +1,30 @@
-"""TMX Stock Analysts Model"""
+"""TMX Stock Analysts Model."""
 
 # pylint: disable=unused-argument
-import asyncio
-import json
+
 from typing import Any, Dict, List, Optional
 
+from openbb_core.app.model.abstract.error import OpenBBError
 from openbb_core.provider.abstract.fetcher import Fetcher
 from openbb_core.provider.standard_models.price_target_consensus import (
     PriceTargetConsensusData,
     PriceTargetConsensusQueryParams,
 )
-from openbb_tmx.utils import gql
-from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent
 from pydantic import Field, field_validator
 
 
 class TmxPriceTargetConsensusQueryParams(PriceTargetConsensusQueryParams):
     """TMX Price Target Consensus Query."""
 
-    __json_schema_extra__ = {"symbol": ["multiple_items_allowed"]}
+    __json_schema_extra__ = {"symbol": {"multiple_items_allowed": True}}
+
+    @field_validator("symbol", mode="before", check_fields=False)
+    @classmethod
+    def check_symbol(cls, value):
+        """Check the symbol."""
+        if not value:
+            raise OpenBBError("Symbol is a required field for TMX.")
+        return value
 
 
 class TmxPriceTargetConsensusData(PriceTargetConsensusData):
@@ -34,7 +40,7 @@ class TmxPriceTargetConsensusData(PriceTargetConsensusData):
     target_upside: Optional[float] = Field(
         default=None,
         description="Percent of upside, as a normalized percent.",
-        json_schema_extra={"unit_measurement": "percent", "frontend_multiply": 100},
+        json_schema_extra={"x-unit_measurement": "percent", "x-frontend_multiply": 100},
     )
     total_analysts: Optional[int] = Field(
         default=None, description="Total number of analyst."
@@ -88,8 +94,14 @@ class TmxPriceTargetConsensusFetcher(
         **kwargs: Any,
     ) -> List[Dict]:
         """Return the raw data from the TMX endpoint."""
-        symbols = query.symbol.split(",")
-        results = []
+        # pylint: disable=import-outside-toplevel
+        import asyncio  # noqa
+        import json  # noqa
+        from openbb_tmx.utils import gql  # noqa
+        from openbb_tmx.utils.helpers import get_data_from_gql, get_random_agent  # noqa
+
+        symbols = query.symbol.split(",")  # type: ignore
+        results: List[Dict] = []
 
         async def create_task(symbol, results):
             """Create a task for each symbol provided."""

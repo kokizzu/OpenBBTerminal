@@ -1,9 +1,7 @@
 """Equity Info Standard Model."""
 
 from datetime import date as dateType
-from typing import List, Optional, Set, Union
-
-from pydantic import Field, field_validator
+from typing import Optional
 
 from openbb_core.provider.abstract.data import Data
 from openbb_core.provider.abstract.query_params import QueryParams
@@ -11,6 +9,7 @@ from openbb_core.provider.utils.descriptions import (
     DATA_DESCRIPTIONS,
     QUERY_DESCRIPTIONS,
 )
+from pydantic import Field, field_validator
 
 
 class EquityInfoQueryParams(QueryParams):
@@ -20,8 +19,8 @@ class EquityInfoQueryParams(QueryParams):
 
     @field_validator("symbol", mode="before", check_fields=False)
     @classmethod
-    def upper_symbol(cls, v: str) -> str:
-        """Convert symbol to uppercase."""
+    def to_upper(cls, v: str) -> str:
+        """Convert field to uppercase."""
         return v.upper()
 
 
@@ -141,11 +140,3 @@ class EquityInfoData(Data):
     last_stock_price_date: Optional[dateType] = Field(
         default=None, description="Date of the company's last stock price."
     )
-
-    @field_validator("symbol", mode="before", check_fields=False)
-    @classmethod
-    def upper_symbol(cls, v: Union[str, List[str], Set[str]]):
-        """Convert symbol to uppercase."""
-        if isinstance(v, str):
-            return v.upper()
-        return ",".join([symbol.upper() for symbol in list(v)])
